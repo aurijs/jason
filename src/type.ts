@@ -1,6 +1,19 @@
 import type JasonDB from "./index";
 
 /**
+ * Base data interface that all data should extend.
+ *
+ * @property id A unique identifier for the item.
+ * @property _version The version number of the item. Only used by the versioning concurrency strategy.
+ * @property _lastModified The last modified timestamp of the item. Only used by the versioning concurrency strategy.
+ */
+export interface BaseDocument {
+	id: string;
+	_version?: number;
+	_lastModified?: number;
+}
+
+/**
  * Represents a database data type.
  *
  * @template T The type of data in the database.
@@ -107,3 +120,13 @@ export interface QueryOptions {
  * @see QueryOptions
  */
 export type QueryOptionsPartial = Partial<QueryOptions>;
+
+/**
+ * Represents the concurrency strategy of a JasonDB instance.
+ *
+ * The possible values are:
+ * - "optimistic": The default strategy which will throw an error if the data has changed since the last read.
+ * - "versioning": The strategy which will auto-increment a version number for each update and will throw an error if the version number has changed since the last read.
+ * - "none": The strategy which will not check for concurrency at all.
+ */
+export type ConcurrencyStrategy = "optimistic" | "versioning" | "none";
