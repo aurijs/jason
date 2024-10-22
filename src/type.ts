@@ -14,6 +14,20 @@ export interface BaseDocument {
 }
 
 /**
+ * Represents information about a lock in a database.
+ *
+ * @property id The unique id of the lock.
+ * @property timestamp The timestamp when the lock was acquired.
+ * @property expiresAt The timestamp when the lock will expire.
+ */
+export interface LockInfo {
+	id: string;
+	timestamp: number;
+	expiresAt: number;
+}
+
+
+/**
  * Represents a database data type.
  *
  * @template T The type of data in the database.
