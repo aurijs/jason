@@ -12,11 +12,12 @@ import Cache from "./cache";
 import type {
 	BaseDocument,
 	CollectionMetadata,
+	CollectionOptions,
 	ConcurrencyStrategy,
 	ValidationFunction,
 } from "./type";
 
-export default class Collection<T extends BaseDocument> {
+export default class Collection<T extends BaseDocument = BaseDocument> {
 	private basePath: string;
 	private metadataPath: string;
 	private schema: ValidationFunction<T>;
@@ -24,14 +25,20 @@ export default class Collection<T extends BaseDocument> {
 	private metadata: CollectionMetadata;
 	private cache = new Cache<T>();
 
+	/**
+	 * Constructs a new Collection.
+	 *
+	 * @param basePath - The base path where the collection data will be stored.
+	 * @param name - The name of the collection.
+	 * @param options - Options for the collection.
+	 * @param options.schema - The schema validation function for the collection.
+	 * @param options.concurrencyStrategy - The concurrency strategy of the collection.
+	 * @param options.cacheTimeout - The cache timeout in milliseconds.
+	 */
 	constructor(
 		basePath: string,
 		name: string,
-		options: {
-			schema?: ValidationFunction<T>;
-			concurrencyStrategy?: ConcurrencyStrategy;
-			cacheTimeout?: number;
-		} = {},
+		options: CollectionOptions<T> = {},
 	) {
 		this.basePath = path.join(basePath, name);
 		this.metadataPath = path.join(this.basePath, "_metadata.json");
@@ -194,7 +201,10 @@ export default class Collection<T extends BaseDocument> {
 	 */
 	async read(id: string): Promise<T | null> {
 		const cached = this.cache.get(id);
-		if (cached?._lastModified && Date.now() - cached._lastModified < 60000) {
+		if (
+			cached?._lastModified &&
+			Date.now() - cached._lastModified < this.cache.timeout
+		) {
 			return cached;
 		}
 
@@ -227,7 +237,7 @@ export default class Collection<T extends BaseDocument> {
 	 * @throws An error if the lock cannot be acquired or if the update operation
 	 * encounters an error.
 	 */
-	async update(id: string, data: Partial<T>): Promise<T | null> {
+	async update(id: string, data: Partial<Omit<T, "id">>): Promise<T | null> {
 		if (this.concurrencyStrategy === "optimistic") {
 			const lockId = await this.acquireLock(id);
 			if (!lockId) {
@@ -259,7 +269,10 @@ export default class Collection<T extends BaseDocument> {
 	 * @returns A promise that resolves to the updated document or null if it does not exist.
 	 * @throws An error if the document failed schema validation or if the version number has changed.
 	 */
-	private async _update(id: string, data: Partial<T>): Promise<T | null> {
+	private async _update(
+		id: string,
+		data: Partial<Omit<T, "id">>,
+	): Promise<T | null> {
 		const current = await this.read(id);
 		if (!current) return null;
 		if (
@@ -275,6 +288,7 @@ export default class Collection<T extends BaseDocument> {
 		const updated = {
 			...current,
 			...data,
+			id: current.id,
 			_version:
 				this.concurrencyStrategy === "versioning"
 					? (current._version || 0) + 1
