@@ -7,13 +7,13 @@ import type { ITest } from "../src/type";
 const testFilename = "test_db";
 const filePath = path.join(process.cwd(), `${testFilename}.json`);
 
-// afterEach(async () => {
-// 	try {
-// 		await unlink(filePath);
-// 	} catch (error) {
-// 		/* ignore error if file doesn't exists */
-// 	}
-// });
+afterEach(async () => {
+	try {
+		await unlink(filePath);
+	} catch (error) {
+		/* ignore error if file doesn't exists */
+	}
+});
 
 describe("DB crud", () => {
 	it("should create an item", async () => {
