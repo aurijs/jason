@@ -1,5 +1,7 @@
 # jason
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/mit-license.php)
+
 A simple, lightweight, and embeddable JSON document database built with Bun.  jason provides a straightforward API for managing collections of JSON documents, featuring built-in caching and support for schema validation and optimistic concurrency.
 
 ## Features
@@ -11,7 +13,6 @@ A simple, lightweight, and embeddable JSON document database built with Bun.  ja
 * **Versioning support:**  Optional versioning helps track document changes and manage concurrent updates.
 * **Built-in caching:**  Improve read performance with configurable caching.
 * **Querying:** Filter documents based on custom criteria.
-
 
 ## Installation
 
@@ -75,7 +76,6 @@ const collectionNames = await db.listCollections();
 
 ```
 
-
 ## API
 
 ### `JasonDB`
@@ -91,7 +91,6 @@ const collectionNames = await db.listCollections();
 * **`update(id: string, data: Partial<Omit<T, "id">>): Promise<T | null>`:** Updates a document by ID. Returns `null` if not found.
 * **`delete(id: string): Promise<boolean>`:** Deletes a document by ID.  Returns `true` on success, `false` otherwise.
 * **`query(filter: (doc: T) => boolean): Promise<T[]>`:** Queries documents based on a filter function.
-
 
 ## Concurrency Strategies
 
