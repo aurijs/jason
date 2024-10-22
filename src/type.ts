@@ -1,4 +1,4 @@
-import type JasonDB from "./index";
+import type Collection from "./collection";
 
 /**
  * Base data interface that all data should extend.
@@ -14,6 +14,33 @@ export interface BaseDocument {
 }
 
 /**
+ * Helper type to extract the document type from an array
+ */
+type ExtractDocument<T> = T extends Array<infer D> ? D : never;
+
+/**
+ * Helper type to ensure each collection value is an array of BaseDocument
+ */
+export type EnsureBaseDocument<T> = {
+	[K in keyof T]: T[K] extends Array<BaseDocument> ? T[K] : never;
+};
+
+/**
+ * Type to extract the document type from a collection
+ */
+export type CollectionDocument<
+	T extends BaseCollections,
+	K extends keyof T,
+> = T[K] extends (infer D)[] ? (D extends BaseDocument ? D : never) : never;
+
+/**
+ * Base interface for collections map in JasonDB
+ */
+export interface BaseCollections {
+	[key: string]: BaseDocument[];
+}
+
+/**
  * Represents information about a lock in a database.
  *
  * @property id The unique id of the lock.
@@ -26,34 +53,12 @@ export interface LockInfo {
 	expiresAt: number;
 }
 
-
 /**
  * Represents a database data type.
  *
  * @template T The type of data in the database.
  */
 export type DatabaseData<T> = Record<string, T>;
-
-/**
- * Represents a test data type.
- */
-export interface ITest {
-	/**
-	 * The unique identifier of the test.
-	 */
-	id: number;
-	/**
-	 * The name of the test.
-	 */
-	name: string;
-}
-
-/**
- * Represents a required test data type.
- *
- * @see ITest
- */
-export type ITestRequired = Required<ITest>;
 
 /**
  * Represents an index type.
@@ -83,30 +88,11 @@ export type ValidationFunction<T> = (item: T) => boolean;
  *
  * @template T The type of data in the database.
  */
-export type Plugin<T> = (orm: JasonDB<T>) => void;
-
-/**
- * Represents a migration type.
- */
-export interface Migration {
-	/**
-	 * The version of the migration.
-	 */
-	version: number;
-	/**
-	 * The up function of the migration.
-	 */
-	up: (data: unknown[]) => unknown[];
-	/**
-	 * The down function of the migration.
-	 */
-	down: (data: unknown[]) => unknown[];
-}
+export type Plugin<T extends BaseDocument> = (collection: Collection<T>) => void;
 
 /**
  * Represents a query options type.
  *
- * @template T The type of data being queried.
  */
 export interface QueryOptions {
 	/**
@@ -130,7 +116,6 @@ export interface QueryOptions {
 /**
  * Represents a partial query options type.
  *
- * @template T The type of data being queried.
  * @see QueryOptions
  */
 export type QueryOptionsPartial = Partial<QueryOptions>;
@@ -144,3 +129,34 @@ export type QueryOptionsPartial = Partial<QueryOptions>;
  * - "none": The strategy which will not check for concurrency at all.
  */
 export type ConcurrencyStrategy = "optimistic" | "versioning" | "none";
+
+/**
+ * Represents metadata for a collection.
+ *
+ * @property name The name of the collection.
+ * @property documentCount The number of documents in the collection.
+ * @property indexes A list of indexes present in the collection.
+ * @property lastModified The timestamp of the last modification to the collection.
+ */
+export interface CollectionMetadata {
+	name: string;
+	documentCount: number;
+	indexes: string[];
+	lastModified: number;
+}
+
+/**
+ * Options for configuring a collection.
+ *
+ * @template T - The type of documents in the collection.
+ * @property initialData - An optional array of initial data to populate the collection.
+ * @property schema - An optional validation function for documents in the collection.
+ * @property concurrencyStrategy - An optional concurrency strategy for the collection.
+ * @property cacheTimeout - An optional cache timeout in milliseconds.
+ */
+export interface CollectionOptions<T extends BaseDocument> {
+	initialData?: T[];
+	schema?: ValidationFunction<T>;
+	concurrencyStrategy?: ConcurrencyStrategy;
+	cacheTimeout?: number;
+}
