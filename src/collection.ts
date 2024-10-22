@@ -23,7 +23,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	private schema: ValidationFunction<T>;
 	private concurrencyStrategy: ConcurrencyStrategy;
 	private metadata: CollectionMetadata;
-	private cache = new Cache<T>();
+	private cache: Cache<T>;
 
 	/**
 	 * Constructs a new Collection.
@@ -50,6 +50,8 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 			indexes: [],
 			lastModified: Date.now(),
 		};
+
+		this.cache = new Cache<T>(options.cacheTimeout);
 	}
 
 	/**
@@ -162,7 +164,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @returns A promise that resolves to the created document.
 	 * @throws An error if the document failed schema validation or if the collection did not exist.
 	 */
-	async create(data: Omit<T, "_id">): Promise<T> {
+	async create(data: Omit<T, "id">): Promise<T> {
 		await this.ensureCollectionExists();
 
 		const id = crypto.randomBytes(16).toString("hex");
