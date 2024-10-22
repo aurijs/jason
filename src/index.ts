@@ -2,10 +2,9 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 import Collection from "./collection";
 import type {
-	BaseDocument,
 	CollectionDocument,
 	CollectionOptions,
-	EnsureBaseDocument,
+	EnsureBaseDocument
 } from "./type";
 
 export default class JasonDB<T extends EnsureBaseDocument<T>> {
