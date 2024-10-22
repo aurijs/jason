@@ -4,6 +4,10 @@ export default class Cache<T = BaseDocument> {
 	#cache = new Map<string, T>();
 	#cacheTimeout = 60000;
 
+	constructor(cacheTimout = 60000) {
+		this.#cacheTimeout = cacheTimout;
+	}
+
 	/**
 	 * Gets the current cache timeout duration.
 	 * Defaults to 60 seconds (1 minute).
@@ -11,6 +15,15 @@ export default class Cache<T = BaseDocument> {
 	 */
 	get timeout() {
 		return this.#cacheTimeout;
+	}
+
+	/**
+	 * Sets the cache timeout duration.
+	 *
+	 * @param timeout - The duration in milliseconds after which the cached item should be removed.
+	 */
+	set timeout(timeout: number) {
+		this.#cacheTimeout = timeout;
 	}
 
 	/**
@@ -42,14 +55,5 @@ export default class Cache<T = BaseDocument> {
 	 */
 	delete(id: string): void {
 		this.#cache.delete(id);
-	}
-
-	/**
-	 * Sets the cache timeout duration.
-	 *
-	 * @param timeout - The duration in milliseconds after which the cached item should be removed.
-	 */
-	setCacheTimeout(timeout: number): void {
-		this.#cacheTimeout = timeout;
 	}
 }
