@@ -1,7 +1,7 @@
-import type { DatabaseData } from "./type";
+import type { BaseDocument } from "./type";
 
-export default class Cache<T> {
-	#cache = new Map<string, DatabaseData<T>>();
+export default class Cache<T = BaseDocument> {
+	#cache = new Map<string, T>();
 	#cacheTimeout = 60000;
 
 	/**
@@ -9,9 +9,9 @@ export default class Cache<T> {
 	 *
 	 * @param item - The item to be cached, identified by its unique id.
 	 */
-	updateCache(item: T): void {
-		this.#cache.set(item.id, item);
-		setTimeout(() => this.#cache.delete(item.id), this.#cacheTimeout);
+	updateCache(id: string, item: T): void {
+		this.#cache.set(id, item);
+		setTimeout(() => this.#cache.delete(id), this.#cacheTimeout);
 	}
 
 	/**
@@ -19,7 +19,7 @@ export default class Cache<T> {
 	 *
 	 * @param id - The id of the item to be retrieved.
 	 */
-	getFromCache(id: string): DatabaseData<T> | null {
+	getFromCache(id: string): T | null {
 		return this.#cache.get(id) || null;
 	}
 
