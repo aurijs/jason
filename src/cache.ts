@@ -5,6 +5,15 @@ export default class Cache<T = BaseDocument> {
 	#cacheTimeout = 60000;
 
 	/**
+	 * Gets the current cache timeout duration.
+	 * Defaults to 60 seconds (1 minute).
+	 * @returns The duration in milliseconds after which cached items are automatically removed.
+	 */
+	get timeout() {
+		return this.#cacheTimeout;
+	}
+
+	/**
 	 * Updates the cache with the given item and sets a timeout for its expiration.
 	 *
 	 * @param id - The unique identifier of the item to be cached.
