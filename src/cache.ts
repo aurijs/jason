@@ -5,11 +5,14 @@ export default class Cache<T = BaseDocument> {
 	#cacheTimeout = 60000;
 
 	/**
-	 * Updates the cache with the given item and sets a timeout to remove it.
+	 * Updates the cache with the given item and sets a timeout for its expiration.
 	 *
-	 * @param item - The item to be cached, identified by its unique id.
+	 * @param id - The unique identifier of the item to be cached.
+	 * @param item - The item to be stored in the cache.
+	 *
+	 * The item will be automatically removed from the cache after the specified cache timeout.
 	 */
-	updateCache(id: string, item: T): void {
+	update(id: string, item: T): void {
 		this.#cache.set(id, item);
 		setTimeout(() => this.#cache.delete(id), this.#cacheTimeout);
 	}
@@ -19,7 +22,7 @@ export default class Cache<T = BaseDocument> {
 	 *
 	 * @param id - The id of the item to be retrieved.
 	 */
-	getFromCache(id: string): T | null {
+	get(id: string): T | null {
 		return this.#cache.get(id) || null;
 	}
 
@@ -28,7 +31,7 @@ export default class Cache<T = BaseDocument> {
 	 *
 	 * @param id - The id of the item to be removed from the cache.
 	 */
-	removeFromCache(id: string): void {
+	delete(id: string): void {
 		this.#cache.delete(id);
 	}
 
