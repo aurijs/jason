@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { rmdir, unlink } from "node:fs/promises";
+import { rmdir } from "node:fs/promises";
 import path from "node:path";
-import JasonDB from "../src";
+import JasonDB from "../src/core";
 import type { BaseDocument } from "../src/type";
 
 interface TestUser extends BaseDocument {
