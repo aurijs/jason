@@ -8,7 +8,7 @@ import type Collection from "./collection";
  * @property _lastModified The last modified timestamp of the item. Only used by the versioning concurrency strategy.
  */
 export interface BaseDocument {
-	id: string;
+	id?: string;
 	_version?: number;
 	_lastModified?: number;
 }

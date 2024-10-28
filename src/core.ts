@@ -20,7 +20,7 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	 * @param basePath - The base path where the database files will be stored.
 	 */
 	constructor(basePath: string) {
-		this.basePath = path.join(process.cwd(), `${basePath}.json`);
+		this.basePath = path.join(process.cwd(), `${basePath}`);
 	}
 
 	/**

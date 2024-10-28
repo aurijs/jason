@@ -164,7 +164,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @returns A promise that resolves to the created document.
 	 * @throws An error if the document failed schema validation or if the collection did not exist.
 	 */
-	async create(data: Omit<T, "id">): Promise<T> {
+	async create(data: T): Promise<T> {
 		await this.ensureCollectionExists();
 
 		const id = crypto.randomBytes(16).toString("hex");
