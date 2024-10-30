@@ -149,7 +149,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 			if (savedLockId === lockId) {
 				await unlink(lockPath);
 			}
-		} catch {}
+		} catch { }
 	}
 
 	/**
@@ -167,7 +167,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	async create(data: T): Promise<T> {
 		await this.ensureCollectionExists();
 
-		const id = crypto.randomBytes(16).toString("hex");
+		const id = data.id ?? crypto.randomBytes(16).toString("hex");
 		const document = { ...data, id } as T;
 
 		if (!this.schema(document)) {
@@ -220,6 +220,48 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 		} catch {
 			return null;
 		}
+	}
+
+	
+	/**
+	 * Reads all documents from the collection.
+	 *
+	 * Returns an array of documents.
+	 *
+	 * @param options - Optional parameters to control the result.
+	 * @param options.skip - The number of documents to skip.
+	 * @param options.limit - The maximum number of documents to return.
+	 * @returns A promise that resolves to an array of documents.
+	 */
+	async readAll(options?: { skip?: number; limit?: number }): Promise<T[]> {
+		await this.ensureCollectionExists();
+
+		const files = await readdir(this.basePath);
+
+		const documentFiles = files.filter(file =>
+			file.endsWith('.json') && !file.startsWith('_')
+		);
+
+		let results: T[] = [];
+
+		await Promise.all(
+			documentFiles.map(async file => {
+				const id = file.replace('.json', '');
+				const doc = await this.read(id);
+				if (doc !== null) {
+					results.push(doc);
+				}
+			})
+		);
+
+		if (options?.skip) {
+			results = results.slice(options.skip);
+		}
+		if (options?.limit) {
+			results = results.slice(0, options.limit);
+		}
+
+		return results;
 	}
 
 	/**

@@ -46,6 +46,7 @@ describe("Collection tests", () => {
 		expect(users).toBeDefined();
 		expect(posts).toBeDefined();
 
+
 		const collections = await db.listCollections();
 		expect(collections).toEqual(["users", "posts"]);
 	});
