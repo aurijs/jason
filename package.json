@@ -1,7 +1,7 @@
 {
 	"name": "jason",
-	"description": "A simple, lightweight, and embeddable JSON document database built with Bun.",
-	"version": "1.0.0",
+	"description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
+	"version": "1.0.1",
 	"exports": {
 		".": {
 			"import": "./src/index.ts",
@@ -15,6 +15,11 @@
 		"email": "lucas210898.lao@gmail.com"
 	},
 	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/realfakenerd/jason"
+	},
 	"devDependencies": {
 		"@types/bun": "latest"
 	},
