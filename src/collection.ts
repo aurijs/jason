@@ -44,12 +44,12 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 		this.metadataPath = path.join(this.basePath, "_metadata.json");
 		this.schema = options.schema || (() => true);
 		this.concurrencyStrategy = options.concurrencyStrategy || "optimistic";
-		this.metadata = {
+		this.metadata = options.generateMetadata ? {
 			name,
 			documentCount: 0,
 			indexes: [],
 			lastModified: Date.now(),
-		};
+		} : {} as CollectionMetadata;
 
 		this.cache = new Cache<T>(options.cacheTimeout);
 	}
@@ -92,6 +92,8 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @returns A promise that resolves when the metadata is loaded.
 	 */
 	private async loadMetadata(): Promise<void> {
+		if(!this.metadata || Object.keys(this.metadata).length === 0) return;
+
 		try {
 			const data = await readFile(this.metadataPath, "utf8");
 			this.metadata = JSON.parse(data);
@@ -108,6 +110,8 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @returns A promise that resolves when the metadata is saved.
 	 */
 	private async saveMetadata(): Promise<void> {
+		if(!this.metadata || Object.keys(this.metadata).length === 0) return;
+
 		await writeFile(this.metadataPath, JSON.stringify(this.metadata, null, 2));
 	}
 

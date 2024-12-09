@@ -159,4 +159,5 @@ export interface CollectionOptions<T extends BaseDocument> {
 	schema?: ValidationFunction<T>;
 	concurrencyStrategy?: ConcurrencyStrategy;
 	cacheTimeout?: number;
+	generateMetadata?: boolean;
 }
