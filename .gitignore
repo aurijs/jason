@@ -175,3 +175,6 @@ dist
 .DS_Store
 
 .idx
+
+.vscode
+

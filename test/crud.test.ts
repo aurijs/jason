@@ -109,16 +109,174 @@ describe("CRUD tests", () => {
 			expect(retrieved).toBeNull();
 		});
 
-		it("should handle reading non-existent user", async () => {
+		it("should throw error when reading non-existent user", async () => {
 			const users = db.collection("users");
-			const retrieved = await users.read("non-existent-id");
+			expect(users.read("non-existent-id")).rejects.toThrowError(
+				"Document not found",
+			);
+		});
+
+		it("should throw error when updating non-existent user", async () => {
+			const users = db.collection("users");
+			expect(
+				users.update("non-existent-id", { age: 40 }),
+			).rejects.toThrowError("Document not found");
+		});
+
+		it("should throw error when deleting non-existent user", async () => {
+			const users = db.collection("users");
+			expect(
+				users.delete("non-existent-id"),
+			).rejects.toThrowError("Document not found");
+		});
+
+		it("should throw error when creating user with invalid data", async () => {
+			const users = db.collection("users");
+			expect(
+				users.create({ name: 123, email: "invalid", age: "30" } as any),
+			).rejects.toThrow();
+		});
+	});
+
+	describe("Post collection", () => {
+		it("should create a new post", async () => {
+			const posts = db.collection("posts");
+			const postData = {
+				title: "Test Post",
+				content: "This is a test post content",
+				authorId: "test-author-id",
+			};
+
+			const post = await posts.create(postData);
+
+			expect(post).toBeDefined();
+			expect(post.id).toBeDefined();
+			expect(post.title).toBe(postData.title);
+			expect(post.content).toBe(postData.content);
+			expect(post.authorId).toBe(postData.authorId);
+		});
+
+		it("should read a post", async () => {
+			const posts = db.collection("posts");
+			const postData = {
+				title: "Test Post",
+				content: "This is a test post content",
+				authorId: "test-author-id",
+			};
+
+			const created = await posts.create(postData);
+			const retrieved = await posts.read(created.id);
+
+			expect(retrieved).toBeDefined();
+			expect(retrieved?.id).toBe(created.id);
+			expect(retrieved?.title).toBe(postData.title);
+			expect(retrieved?.content).toBe(postData.content);
+			expect(retrieved?.authorId).toBe(postData.authorId);
+		});
+
+		it("should update a post", async () => {
+			const posts = db.collection("posts");
+			const postData = {
+				title: "Test Post",
+				content: "This is a test post content",
+				authorId: "test-author-id",
+			};
+
+			const created = await posts.create(postData);
+			const updated = await posts.update(created.id, {
+				content: "Updated content",
+			});
+
+			expect(updated).toBeDefined();
+			expect(updated?.id).toBe(created.id);
+			expect(updated?.title).toBe(postData.title);
+			expect(updated?.content).toBe("Updated content");
+			expect(updated?.authorId).toBe(postData.authorId);
+		});
+
+		it("should delete a post", async () => {
+			const posts = db.collection("posts");
+			const postData = {
+				title: "Test Post",
+				content: "This is a test post content",
+				authorId: "test-author-id",
+			};
+
+			const created = await posts.create(postData);
+			const deleteResult = await posts.delete(created.id);
+			const retrieved = await posts.read(created.id);
+
+			expect(deleteResult).toBe(true);
 			expect(retrieved).toBeNull();
 		});
 
-		it("should handle updating non-existent user", async () => {
-			const users = db.collection("users");
-			const updated = await users.update("non-existent-id", { age: 40 });
-			expect(updated).toBeNull();
+		it("should throw error when reading non-existent post", async () => {
+			const posts = db.collection("posts");
+			await expect(posts.read("non-existent-id")).rejects.toThrowError(
+				"Document not found",
+			);
+		});
+
+		it("should throw error when updating non-existent post", async () => {
+			const posts = db.collection("posts");
+			await expect(
+				posts.update("non-existent-id", { content: "Updated" }),
+			).rejects.toThrowError("Document not found");
+		});
+
+		it("should throw error when deleting non-existent post", async () => {
+			const posts = db.collection("posts");
+			await expect(
+				posts.delete("non-existent-id"),
+			).rejects.toThrowError("Document not found");
+		});
+
+		it("should query posts by authorId", async () => {
+			const posts = db.collection("posts");
+			const postData1 = {
+				title: "Test Post 1",
+				content: "Content 1",
+				authorId: "author-1",
+			};
+			const postData2 = {
+				title: "Test Post 2",
+				content: "Content 2",
+				authorId: "author-1",
+			};
+			const postData3 = {
+				title: "Test Post 3",
+				content: "Content 3",
+				authorId: "author-2",
+			};
+
+			await posts.create(postData1);
+			await posts.create(postData2);
+			await posts.create(postData3);
+
+			const author1Posts = await posts.query(
+				(post) => post.authorId === "author-1",
+			);
+
+			expect(author1Posts).toHaveLength(2);
+			expect(author1Posts[0].authorId).toBe("author-1");
+			expect(author1Posts[1].authorId).toBe("author-1");
+
+			const author2Posts = await posts.query(
+				(post) => post.authorId === "author-2",
+			);
+			expect(author2Posts).toHaveLength(1);
+			expect(author2Posts[0].authorId).toBe("author-2");
+		});
+
+		it("should throw error when creating post with invalid data", async () => {
+			const posts = db.collection("posts");
+			await expect(
+				posts.create({
+					title: 123,
+					content: 456,
+					authorId: true,
+				} as any),
+			).rejects.toThrow();
 		});
 	});
 
@@ -192,7 +350,7 @@ describe("CRUD tests", () => {
 			expect(validCreated).toBeDefined();
 			expect(validCreated.age).toBe(25);
 
-			expect(users.create(invalidUser)).rejects.toThrow(
+			await expect(users.create(invalidUser)).rejects.toThrowError(
 				"Document failed schema validation",
 			);
 		});
