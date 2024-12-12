@@ -1,27 +1,61 @@
 import { readdir } from "node:fs/promises";
+import { EventEmitter } from 'node:events'
 import path from "node:path";
 import Collection from "./collection";
 import type {
 	CollectionDocument,
 	CollectionOptions,
-	EnsureBaseDocument
+	EnsureBaseDocument,
+	Plugin,
+	PluginLifecycle
 } from "./type";
+
 
 export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	private basePath: string;
+	private plugins: Plugin<T>[] = [];
+	private eventEmitter = new EventEmitter();
 	private collections = new Map<
 		keyof T,
 		Collection<CollectionDocument<T, keyof T>>
 	>();
+
+
 
 	/**
 	 * Constructs a new JasonDB instance.
 	 *
 	 * @param basePath - The base path where the database files will be stored.
 	 */
-	constructor(basePath: string) {
+	constructor(basePath: string = 'db') {
 		this.basePath = path.join(process.cwd(), `${basePath}`);
 	}
+
+	/**
+		 * Registers a plugin with the database.
+		 *
+		 * @param plugin - The plugin to register.
+		 * @template P The type of the plugin
+		 */
+	registerPlugin<P>(plugin: Plugin<P>) {
+		// Add the plugin to the list of registered plugins.
+		this.plugins.push(plugin);
+
+		// Register the plugin's lifecycle handlers.
+		Object.entries(plugin.lifecycle || {}).forEach(([lifecycle, handler]) => {
+			// Listen for the lifecycle event and execute the handler when it's emitted.
+			this.eventEmitter.on(lifecycle, handler);
+		});
+	}
+
+	async triggerLifeCycle(lifecycle: PluginLifecycle, context: any) {
+		await Promise.all(
+			this.plugins
+				.filter(plugin => plugin.lifecycle?.[lifecycle])
+				.map(plugin => plugin.lifecycle?.[lifecycle]?.(context))
+		)
+	}
+
 
 	/**
 	 * Retrieves or creates a collection in the database.
@@ -41,6 +75,8 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 		name: K,
 		options: CollectionOptions<CollectionDocument<T, K>> = {},
 	): Collection<CollectionDocument<T, K>> {
+		this.triggerLifeCycle('beforeCollectionCreate', { name, options });
+
 		const existingCollection = this.collections.get(name);
 
 		if (existingCollection) {
@@ -54,6 +90,9 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 		);
 
 		this.collections.set(name, newCollection);
+
+		this.triggerLifeCycle('afterCollectionCreate', { collection: newCollection })
+
 		return newCollection;
 	}
 
