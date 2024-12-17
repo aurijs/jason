@@ -2,13 +2,22 @@
   "name": "jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
   "version": "1.0.1",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "vitest"
+  },
   "exports": {
     ".": {
-      "import": "./src/index.ts",
+      "import": "./dist/index.js",
       "types": "./src/types.d.ts"
     }
   },
-  "files": ["src"],
+  "main": "./dist/index.js",
+  "types": "./src/types.d.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
   "author": {
     "name": "Lucas A. Ouverney",
     "url": "https://github.com/realfakenerd",
@@ -25,5 +34,8 @@
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vitest": "^2.1.8"
   }
 }
