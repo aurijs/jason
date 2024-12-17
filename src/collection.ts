@@ -4,6 +4,7 @@ import {
 	mkdir,
 	readdir,
 	readFile,
+	stat,
 	unlink,
 	writeFile,
 } from "node:fs/promises";
@@ -16,6 +17,8 @@ import type {
 	ConcurrencyStrategy,
 	ValidationFunction,
 } from "./type";
+import AsyncMutex from "./mutex";
+import { DeleteOperationError, DocumentNotFoundError, MetadataPersistenceError, QueryOperationError } from "./errors";
 
 export default class Collection<T extends BaseDocument = BaseDocument> {
 	private basePath: string;
@@ -44,24 +47,36 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 		this.metadataPath = path.join(this.basePath, "_metadata.json");
 		this.schema = options.schema || (() => true);
 		this.concurrencyStrategy = options.concurrencyStrategy || "optimistic";
-		this.metadata = options.generateMetadata ? {
+		this.metadata = this.initializeMetadata(name, options.generateMetadata);
+
+		this.cache = new Cache<T>(options.cacheTimeout);
+
+		this.ensureCollectionExists();
+	}
+
+	/**
+	 * Initializes the collection metadata with the given name and options.
+	 *
+	 * If the options include generateMetadata, the collection metadata will be
+	 * initialized with an empty object. Otherwise, it will be initialized with
+	 * the default collection metadata.
+	 *
+	 * @param name - The name of the collection.
+	 * @param generateMetadata - Whether to initialize the collection metadata
+	 * with an empty object. Defaults to false.
+	 * @returns The initialized collection metadata.
+	 */
+	private initializeMetadata(name: string, generateMetadata?: boolean): CollectionMetadata {
+		if (generateMetadata) {
+			return {} as CollectionMetadata;
+		}
+
+		return {
 			name,
 			documentCount: 0,
 			indexes: [],
 			lastModified: Date.now(),
-		} : {} as CollectionMetadata;
-
-		this.cache = new Cache<T>(options.cacheTimeout);
-	}
-
-	/**
-	 * Returns the path to the document with the given id.
-	 *
-	 * @param id - The id of the document.
-	 * @returns The path to the document.
-	 */
-	private getDocumentPath(id: string): string {
-		return path.join(this.basePath, `${id}.json`);
+		};
 	}
 
 	/**
@@ -75,11 +90,32 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	private async ensureCollectionExists(): Promise<void> {
 		try {
 			await access(this.basePath);
+			return;
 		} catch {
-			await mkdir(this.basePath, { recursive: true });
-			await this.saveMetadata();
+			try {
+				await mkdir(this.basePath, { recursive: true });
+				await this.saveMetadata();
+			} catch (error) {
+				console.error('Failed to create collection directory', {
+					path: this.basePath,
+					error: error instanceof Error ? error.message : 'Unknown error'
+				});
+				throw new Error(`Failed to create collection directory: ${this.basePath}`);
+			}
 		}
 	}
+
+	/**
+	 * Returns the path to the document with the given id.
+	 *
+	 * @param id - The id of the document.
+	 * @returns The path to the document.
+	 */
+	private getDocumentPath(id: string): string {
+		return path.join(this.basePath, `${id}.json`);
+	}
+
+
 
 	/**
 	 * Loads the collection metadata from the file system.
@@ -92,13 +128,61 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @returns A promise that resolves when the metadata is loaded.
 	 */
 	private async loadMetadata(): Promise<void> {
-		if(!this.metadata || Object.keys(this.metadata).length === 0) return;
+		if (this.metadata && Object.keys(this.metadata).length > 0) return;
 
+		const metadataLoadMuxex = new AsyncMutex();
 		try {
-			const data = await readFile(this.metadataPath, "utf8");
-			this.metadata = JSON.parse(data);
-		} catch {
-			await this.saveMetadata();
+			metadataLoadMuxex.lock();
+
+			const filestats = await stat(this.metadataPath);
+
+			// Proteção contra arquivos de metadados muito grandes	
+			if (filestats.size > 1024 * 10) { // 10KB
+				throw new Error('Metadata file is too large');
+			}
+
+			const data = await Promise.race([
+				readFile(this.metadataPath, 'utf-8'),
+				new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Metadata read timeout')), 500))
+			]);
+
+			// Validação estrutural segura do metadata
+			try {
+				const parsedMetadata = JSON.parse(data as string);
+
+				// Validação estrutural básica
+				if (!parsedMetadata || typeof parsedMetadata !== 'object') {
+					throw new Error('Invalid metadata structure');
+				}
+
+				this.metadata = {
+					name: parsedMetadata.name || this.metadata.name,
+					documentCount: parsedMetadata.documentCount || 0,
+					indexes: parsedMetadata.indexes || [],
+					lastModified: parsedMetadata.lastModified || Date.now()
+				};
+			} catch (parseError) {
+				// Tratamento de erro de parsing
+				console.warn('Metadata parsing error, reinitializing', parseError);
+				await this.saveMetadata();
+			}
+		} catch (error) {
+			console.error('Metadata load failed', {
+				path: this.metadataPath,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
+
+			// Fallback para metadata padrão
+			this.metadata = {
+				name: path.basename(this.basePath),
+				documentCount: 0,
+				indexes: [],
+				lastModified: Date.now()
+			};
+
+			await this.saveMetadata()
+		} finally {
+			metadataLoadMuxex.unlock();
 		}
 	}
 
@@ -109,10 +193,35 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 *
 	 * @returns A promise that resolves when the metadata is saved.
 	 */
-	private async saveMetadata(): Promise<void> {
-		if(!this.metadata || Object.keys(this.metadata).length === 0) return;
+	private async saveMetadata(metadata?: Partial<CollectionMetadata>): Promise<void> {
+		const updateMutex = new AsyncMutex();
+		try {
+			updateMutex.lock();
 
-		await writeFile(this.metadataPath, JSON.stringify(this.metadata, null, 2));
+			const updatedMetadata: CollectionMetadata = {
+				...this.metadata,
+				...metadata,
+				lastModified: Date.now(),
+			};
+
+			const metadataContent = JSON.stringify(updatedMetadata, null, 0);
+
+			await writeFile(this.metadataPath, metadataContent, {
+				flag: 'w', // Modo de escrita
+				mode: 0o666 // Permisoes de escrita
+			});
+
+			this.metadata = updatedMetadata;
+		} catch (error: Error | any) {
+			console.error('Metadata Persistence Error:', {
+				path: this.metadataPath,
+				errorCode: error instanceof Error ? error.message : 'UNKNOWN_ERROR',
+			});
+
+			throw new MetadataPersistenceError("Failed to save metadata", error);
+		} finally {
+			updateMutex.unlock();
+		}
 	}
 
 	/**
@@ -169,25 +278,35 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @throws An error if the document failed schema validation or if the collection did not exist.
 	 */
 	async create(data: T): Promise<T> {
-		await this.ensureCollectionExists();
 
-		const id = data.id ?? crypto.randomBytes(16).toString("hex");
+		// Parallel promise execution
+		await Promise.all([
+			this.ensureCollectionExists(),
+			this.loadMetadata()
+		])
+
+
+		const id = data.id ?? crypto.randomUUID(); // Substituição por crypto.randomUUID() mais performática
 		const document = { ...data, id } as T;
 
 		if (!this.schema(document)) {
 			throw new Error("Document failed schema validation");
 		}
 
-		if (this.concurrencyStrategy === "versioning") {
-			document._version = 1;
-			document._lastModified = Date.now();
+		const documentMetadata = {
+			...this.metadata,
+			documentCount: (this.metadata.documentCount || 0) + 1,
+			lastModified: Date.now(),
 		}
 
-		const documentPath = this.getDocumentPath(id);
-		await writeFile(documentPath, JSON.stringify(document, null, 2));
-		this.metadata.documentCount++;
-		this.metadata.lastModified = Date.now();
-		await this.saveMetadata();
+		await Promise.all([
+			writeFile(
+				this.getDocumentPath(id),
+				JSON.stringify(document, null, 0),
+				{ flag: 'wx' }
+			),
+			this.saveMetadata(documentMetadata)
+		])
 
 		this.cache.update(id, document);
 
@@ -222,11 +341,11 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 			this.cache.update(id, document);
 			return document;
 		} catch {
-			return null;
+			throw new Error("Document not found");
 		}
 	}
 
-	
+
 	/**
 	 * Reads all documents from the collection.
 	 *
@@ -266,6 +385,21 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 		}
 
 		return results;
+	}
+
+	/**
+	 * Checks if a document with the specified id exists in the collection.
+	 * 
+	 * @param id - The id of the document to check.
+	 * @returns A promise that resolves to true if the document exists, false otherwise.
+	 */
+	async has(id: string) {
+		try {
+			await access(this.getDocumentPath(id));
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	/**
@@ -362,19 +496,49 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @returns A promise that resolves to true if the document was successfully deleted, or false if the deletion failed.
 	 */
 	async delete(id: string): Promise<boolean> {
+		const deleteMutex = new AsyncMutex();
+
 		try {
+			deleteMutex.lock();
+
 			const documentPath = this.getDocumentPath(id);
-			await unlink(documentPath);
 
-			this.metadata.documentCount--;
-			this.metadata.lastModified = Date.now();
-			await this.saveMetadata();
+			// Operações concorrentes otimizadas
+			const [documentExists] = await Promise.allSettled([
+				access(documentPath),
+				this.cache.get(id) // Verifica se o documento existe na cache
+			])
 
-			this.cache.delete(id);
+			if (documentExists.status === 'rejected') {
+				throw new DocumentNotFoundError(`Document: ${id} not found`)
+			}
+
+			await Promise.race([
+				unlink(documentPath),
+				new Promise((_, reject) => setTimeout(() => reject(new Error('Delete operation timeout')), 500))
+			])
+
+			const updatedMetadata: Partial<CollectionMetadata> = {
+				documentCount: (this.metadata.documentCount || 0) - 1,
+				lastModified: Date.now(),
+			}
+
+			await Promise.all([
+				this.saveMetadata(updatedMetadata),
+				this.cache.delete(id)
+			])
 
 			return true;
-		} catch {
-			return false;
+		} catch (error) {
+			console.error('Delete Operation Failed', {
+				documentId: id,
+				errorMessage: error instanceof Error ? error.message : 'Unknown error'
+			});
+
+			// Erro customizado para melhor rastreabilidade
+			throw new DeleteOperationError('Failed to delete document', error);
+		} finally {
+			deleteMutex.unlock();
 		}
 	}
 
@@ -384,19 +548,90 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 	 * @param filter - A function that takes a document as an argument and returns a boolean indicating whether the document matches the query.
 	 * @returns A promise that resolves to an array of documents that matched the query.
 	 */
-	async query(filter: (doc: T) => boolean): Promise<T[]> {
-		const results: T[] = [];
-		for await (const file of await readdir(this.basePath)) {
-			if (file.endsWith(".json") && !file.startsWith("_")) {
-				const document = path.join(this.basePath, file);
-				const data = await readFile(document, "utf-8");
-				const doc = JSON.parse(data) as T;
-				if (filter(doc)) {
-					results.push(doc);
+	async query(
+		filter: (doc: T) => boolean,
+		options: {
+			concurrent?: boolean;
+			batchSize?: number;
+			timeout?: number;
+		} = {}
+	): Promise<T[]> {
+		const {
+			concurrent = true,
+			batchSize = 50,
+			timeout = 5000 // 5 segundos timeout global
+		} = options;
+
+		const queryMutex = new AsyncMutex();
+
+		try {
+			await queryMutex.lock();
+
+			const files = await readdir(this.basePath, { withFileTypes: true });
+			const jsonFiles = files
+				.filter(file =>
+					file.isFile() &&
+					file.name.endsWith('.json') &&
+					!file.name.startsWith('_')
+				)
+				.map(file => file.name);
+
+			const results: T[] = [];
+
+			if (concurrent) {
+				const processFileBatch = async (batch: string[]) => {
+					const batchResults = await Promise.all(
+						batch.map(async filename => {
+							try {
+								const filePath = path.join(this.basePath, filename);
+								const documentData = await Promise.race([
+									readFile(filePath, 'utf-8'),
+									new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Read operation timeout')), timeout))
+								])
+
+								const doc = JSON.parse(documentData as string) as T;
+								return filter(doc) ? doc : null;
+							} catch (error) {
+								console.error(`Error processing file ${filename}:`, error);
+								return null;
+							}
+						})
+					)
+
+					return batchResults.filter(Boolean) as T[];
+				}
+
+				for (let i = 0; i < jsonFiles.length; i += batchSize) {
+					const batch = jsonFiles.slice(i, i + batchSize);
+					const batchResults = await processFileBatch(batch);
+					results.push(...batchResults);
+				}
+			} else {
+				// Sequencial processing for no concurrency scenario
+				for (const fileName of jsonFiles) {
+					try {
+						const documentPath = path.join(this.basePath, fileName);
+						const documentData = await readFile(documentPath, 'utf-8');
+						const doc = JSON.parse(documentData) as T;
+
+						if (filter(doc)) {
+							results.push(doc);
+						}
+					} catch (error) {
+						console.error(`Error processing file ${fileName}:`, error);
+					}
 				}
 			}
-		}
 
-		return results;
+			return results;
+		} catch (error) {
+			console.error('Query operation failed', {
+				errorMessage: error instanceof Error ? error.message : 'Unknown error'
+			});
+
+			throw new QueryOperationError('Failed to execute query', error);
+		} finally {
+			queryMutex.unlock();
+		}
 	}
 }

@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { access, mkdir, readdir } from "node:fs/promises";
 import { EventEmitter } from 'node:events'
 import path from "node:path";
 import Collection from "./collection";
@@ -29,14 +29,24 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	 */
 	constructor(basePath: string = 'db') {
 		this.basePath = path.join(process.cwd(), `${basePath}`);
+
+		this.ensureDataDirExists();
+	}
+
+	private async ensureDataDirExists() {
+		try {
+			await access(this.basePath);
+		} catch {
+			await mkdir(this.basePath, { recursive: true });
+		}
 	}
 
 	/**
-		 * Registers a plugin with the database.
-		 *
-		 * @param plugin - The plugin to register.
-		 * @template P The type of the plugin
-		 */
+	* Registers a plugin with the database.
+	*
+	* @param plugin - The plugin to register.
+	* @template P The type of the plugin
+	*/
 	registerPlugin<P>(plugin: Plugin<P>) {
 		// Add the plugin to the list of registered plugins.
 		this.plugins.push(plugin);
@@ -107,11 +117,21 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	 */
 	async listCollections(): Promise<(keyof T)[]> {
 		try {
+			if(this.collections.size > 0) return Array.from(this.collections.keys());
+
 			const entries = await readdir(this.basePath, { withFileTypes: true });
 			return entries
-				.filter((entry) => entry.isDirectory())
+				.filter((entry) =>
+					entry.isDirectory() &&
+					!entry.name.startsWith("_")
+				)
 				.map((entry) => entry.name) as (keyof T)[];
-		} catch {
+		} catch (error) {
+			console.error('Failed to list collections', {
+				path: this.basePath,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
+
 			return [];
 		}
 	}
