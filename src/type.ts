@@ -1,4 +1,3 @@
-import type Collection from "./collection";
 
 /**
  * Base data interface that all data should extend.
@@ -83,13 +82,25 @@ export interface Index<T> {
  */
 export type ValidationFunction<T> = (item: T) => boolean;
 
+export type PluginLifecycle =
+	| 'beforeCollectionCreate'
+	| 'afterCollectionCreate'
+	| 'beforeDocumentWrite'
+	| 'afterDocumentWrite'
+	| 'beforeDocumentRead'
+	| 'afterDocumentRead'
+	| 'beforeDocumentDelete'
+	| 'afterDocumentDelete';
+
 /**
  * Represents a plugin type.
  *
  * @template T The type of data in the database.
  */
-export type Plugin<T extends BaseDocument> = (collection: Collection<T>) => void;
-
+export interface Plugin<T = any> {
+	name: string;
+	lifecycle: Partial<Record<PluginLifecycle, (context: T) => Promise<void>|void>>
+} 
 /**
  * Represents a query options type.
  *
@@ -161,3 +172,4 @@ export interface CollectionOptions<T extends BaseDocument> {
 	cacheTimeout?: number;
 	generateMetadata?: boolean;
 }
+

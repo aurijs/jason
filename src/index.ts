@@ -1,2 +1,2 @@
-export { default as JasonDB } from "./core";
-export type { BaseDocument } from "./type";
+export { default as JasonDB } from "./core.js";
+export type { BaseDocument } from "./type.js";

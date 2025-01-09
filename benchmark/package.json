@@ -1,0 +1,17 @@
+{
+  "name": "benchmark",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "bench": "vitest bench"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "lowdb": "^7.0.1"
+  }
+}

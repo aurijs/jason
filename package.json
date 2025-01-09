@@ -1,29 +1,41 @@
 {
-	"name": "jason",
-	"description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
-	"version": "1.0.1",
-	"exports": {
-		".": {
-			"import": "./src/index.ts",
-			"types": "./src/types.d.ts"
-		}
-	},
-	"files": ["src"],
-	"author": {
-		"name": "Lucas A. Ouverney",
-		"url": "https://github.com/realfakenerd",
-		"email": "lucas210898.lao@gmail.com"
-	},
-	"type": "module",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/realfakenerd/jason"
-	},
-	"devDependencies": {
-		"@types/bun": "latest"
-	},
-	"peerDependencies": {
-		"typescript": "^5.0.0"
-	}
+  "name": "jason",
+  "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
+  "version": "1.0.2",
+  "scripts": {
+    "build": "bun run tsc",
+    "test": "vitest"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "author": {
+    "name": "Lucas A. Ouverney",
+    "url": "https://github.com/realfakenerd",
+    "email": "lucas210898.lao@gmail.com"
+  },
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/realfakenerd/jason"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vitest": "^2.1.8"
+  }
 }

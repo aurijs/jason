@@ -1,4 +1,4 @@
-import type { BaseDocument } from "./type";
+import type { BaseDocument } from "./type.js";
 
 export default class Cache<T = BaseDocument> {
 	#cache = new Map<string, T>();
