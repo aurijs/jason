@@ -73,7 +73,7 @@ describe('CREATE POST collection', () => {
         const posts = db.collection("posts", {
             schema: (post: TestPost) => typeof post.title === "string" && typeof post.content === "string" && typeof post.authorId === "string",
         });
-        expect(
+        await expect(
             posts.create({
                 title: 123,
                 content: 456,

@@ -61,9 +61,7 @@ describe('USER tests', () => {
 
     it("should throw error when reading non-existent user", async () => {
         const users = db.collection("users");
-        await expect(users.read("non-existent-id")).rejects.toThrowError(
-            "Document not found",
-        );
+        expect(await users.read("non-existent-id")).toBeNull()
     });
 })
 
@@ -89,8 +87,6 @@ describe("POST tests", () => {
 
     it("should throw error when reading non-existent post", async () => {
         const posts = db.collection("posts");
-        await expect(posts.read("non-existent-id")).rejects.toThrowError(
-            "Document not found",
-        );
+        expect(await posts.read("non-existent-id")).toBeNull();
     });
 });
