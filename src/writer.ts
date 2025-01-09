@@ -1,6 +1,6 @@
 import type { PathLike } from "node:fs";
-import { writeFile, rename } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { retryAsyncOperation } from "./utils.js";
 
