@@ -1,7 +1,7 @@
 {
   "name": "jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "scripts": {
     "build": "bun run tsc",
     "test": "vitest"
