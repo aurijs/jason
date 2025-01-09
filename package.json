@@ -3,17 +3,17 @@
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
   "version": "1.0.1",
   "scripts": {
-    "build": "bun run scripts/build.ts",
+    "build": "bun run tsc",
     "test": "vitest"
   },
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types": "./src/types.d.ts"
+      "types": "./dist/types.d.ts"
     }
   },
   "main": "./dist/index.js",
-  "types": "./src/types.d.ts",
+  "types": "./dist/index.d.ts",
   "files": [
     "src",
     "dist"
