@@ -1,4 +1,3 @@
-import type Collection from "./collection";
 
 /**
  * Base data interface that all data should extend.

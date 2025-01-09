@@ -1,14 +1,14 @@
 import { access, mkdir, readdir } from "node:fs/promises";
 import { EventEmitter } from 'node:events'
 import path from "node:path";
-import Collection from "./collection";
+import Collection from "./collection.js";
 import type {
 	CollectionDocument,
 	CollectionOptions,
 	EnsureBaseDocument,
 	Plugin,
 	PluginLifecycle
-} from "./type";
+} from "./type.js";
 
 
 export default class JasonDB<T extends EnsureBaseDocument<T>> {
