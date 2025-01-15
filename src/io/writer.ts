@@ -2,7 +2,7 @@ import type { PathLike } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { retryAsyncOperation } from "./utils.js";
+import { retryAsyncOperation } from "../utils/utils.js";
 
 type Resolve = () => void;
 type Reject = (error: Error) => void;

@@ -13,17 +13,17 @@ import {
   DeleteOperationError,
   DocumentNotFoundError,
   QueryOperationError,
-} from "./errors.js";
+} from "../core/errors.js";
 import Metadata from "./metadata.js";
-import AsyncMutex from "./mutex.js";
+import AsyncMutex from "../utils/mutex.js";
 import type {
   BaseDocument,
   CollectionMetadata,
   CollectionOptions,
   ConcurrencyStrategy,
   ValidationFunction,
-} from "./type.js";
-import Writer from "./writer.js";
+} from "../types/type.js";
+import Writer from "../io/writer.js";
 
 export default class Collection<T extends BaseDocument = BaseDocument> {
   private basePath: string;
