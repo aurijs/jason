@@ -1,10 +1,14 @@
 {
   "name": "@aurios/jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "scripts": {
     "build": "bun run tsc",
-    "test": "vitest"
+    "test": "vitest",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest --coverage",
+    "clean": "rm -rf dist",
+    "prebuild": "bun run clean"
   },
   "exports": {
     ".": {
@@ -23,19 +27,34 @@
     "url": "https://github.com/realfakenerd",
     "email": "lucas210898.lao@gmail.com"
   },
-  "type": "module",
-  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/realfakenerd/jason"
   },
+  "bugs": {
+    "url": "https://github.com/realfakenerd/jason/issues"
+  },
+  "homepage": "https://github.com/realfakenerd/jason#readme",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "database",
+    "json",
+    "document-database",
+    "bun",
+    "typescript",
+    "lightweight"
+  ],
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@vitest/coverage-v8": "2.1.8",
+    "vitest": "^2.1.8"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "vitest": "^2.1.8"
   }
 }
