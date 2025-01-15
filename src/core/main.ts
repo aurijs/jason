@@ -8,7 +8,7 @@ import type {
 	EnsureBaseDocument,
 	Plugin,
 	PluginLifecycle
-} from "../types/type.js";
+} from "../types/index.js";
 
 
 export default class JasonDB<T extends EnsureBaseDocument<T>> {
