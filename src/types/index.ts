@@ -6,23 +6,27 @@
  * @property _version The version number of the item. Only used by the versioning concurrency strategy.
  * @property _lastModified The last modified timestamp of the item. Only used by the versioning concurrency strategy.
  */
-export interface BaseDocument {
+/**
+ * Base data interface that all data should extend.
+ *
+ * @property id A unique identifier for the item.
+ * @property _version The version number of the item. Only used by the versioning concurrency strategy.
+ * @property _lastModified The last modified timestamp of the item. Only used by the versioning concurrency strategy.
+ */
+export type BaseDocument<T = Record<string, unknown>> = T & {
 	id?: string;
 	_version?: number;
 	_lastModified?: number;
-}
+};
 
 /**
  * Helper type to extract the document type from an array
  */
 type ExtractDocument<T> = T extends Array<infer D> ? D : never;
 
-/**
- * Helper type to ensure each collection value is an array of BaseDocument
- */
-export type EnsureBaseDocument<T> = {
-	[K in keyof T]: T[K] extends Array<BaseDocument> ? T[K] : never;
-};
+export type Document<T, K extends keyof T> = T[K] extends Array<infer U>
+	? BaseDocument<U>
+	: never;
 
 /**
  * Type to extract the document type from a collection
@@ -30,13 +34,13 @@ export type EnsureBaseDocument<T> = {
 export type CollectionDocument<
 	T extends BaseCollections,
 	K extends keyof T,
-> = T[K] extends (infer D)[] ? (D extends BaseDocument ? D : never) : never;
+> = BaseDocument<ExtractDocument<T[K]>>;
 
 /**
  * Base interface for collections map in JasonDB
  */
 export interface BaseCollections {
-	[key: string]: BaseDocument[];
+	[key: string]: unknown[];
 }
 
 /**
@@ -99,8 +103,8 @@ export type PluginLifecycle =
  */
 export interface Plugin<T = any> {
 	name: string;
-	lifecycle: Partial<Record<PluginLifecycle, (context: T) => Promise<void>|void>>
-} 
+	lifecycle: Partial<Record<PluginLifecycle, (context: T) => Promise<void> | void>>
+}
 /**
  * Represents a query options type.
  *
@@ -165,7 +169,7 @@ export interface CollectionMetadata {
  * @property concurrencyStrategy - An optional concurrency strategy for the collection.
  * @property cacheTimeout - An optional cache timeout in milliseconds.
  */
-export interface CollectionOptions<T extends BaseDocument> {
+export interface CollectionOptions<T = BaseDocument> {
 	initialData?: T[];
 	schema?: ValidationFunction<T>;
 	concurrencyStrategy?: ConcurrencyStrategy;
