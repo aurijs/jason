@@ -22,7 +22,7 @@ import type {
   CollectionOptions,
   ConcurrencyStrategy,
   ValidationFunction,
-} from "../types/type.js";
+} from "../types/index.js";
 import Writer from "../io/writer.js";
 
 export default class Collection<T extends BaseDocument = BaseDocument> {
