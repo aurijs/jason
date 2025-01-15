@@ -1,23 +1,22 @@
+import { EventEmitter } from 'node:events';
 import { access, mkdir, readdir } from "node:fs/promises";
-import { EventEmitter } from 'node:events'
 import path from "node:path";
 import Collection from "../data/collection.js";
 import type {
 	CollectionDocument,
 	CollectionOptions,
-	EnsureBaseDocument,
+	Document,
 	Plugin,
 	PluginLifecycle
 } from "../types/index.js";
 
-
-export default class JasonDB<T extends EnsureBaseDocument<T>> {
+export default class JasonDB<T> {
 	private basePath: string;
 	private plugins: Plugin<T>[] = [];
 	private eventEmitter = new EventEmitter();
 	private collections = new Map<
 		keyof T,
-		Collection<CollectionDocument<T, keyof T>>
+		Collection<T, keyof T>
 	>();
 
 
@@ -49,6 +48,7 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	*/
 	registerPlugin<P>(plugin: Plugin<P>) {
 		// Add the plugin to the list of registered plugins.
+		// @ts-ignore not now...
 		this.plugins.push(plugin);
 
 		// Register the plugin's lifecycle handlers.
@@ -83,19 +83,19 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	 */
 	collection<K extends keyof T>(
 		name: K,
-		options: CollectionOptions<CollectionDocument<T, K>> = {},
-	): Collection<CollectionDocument<T, K>> {
+		options: CollectionOptions<Document<T, K>> = {},
+	): Collection<T, K> {
 		this.triggerLifeCycle('beforeCollectionCreate', { name, options });
 
 		const existingCollection = this.collections.get(name);
 
 		if (existingCollection) {
-			return existingCollection as Collection<CollectionDocument<T, K>>;
+			return existingCollection as Collection<T, K>;
 		}
 
-		const newCollection = new Collection<CollectionDocument<T, K>>(
+		const newCollection = new Collection<T, K>(
 			this.basePath,
-			name as string,
+			name,
 			options,
 		);
 
@@ -117,7 +117,7 @@ export default class JasonDB<T extends EnsureBaseDocument<T>> {
 	 */
 	async listCollections(): Promise<(keyof T)[]> {
 		try {
-			if(this.collections.size > 0) return Array.from(this.collections.keys());
+			if (this.collections.size > 0) return Array.from(this.collections.keys());
 
 			const entries = await readdir(this.basePath, { withFileTypes: true });
 			return entries
