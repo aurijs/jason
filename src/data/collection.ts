@@ -8,29 +8,32 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import Cache from "./cache.js";
 import {
   DeleteOperationError,
   DocumentNotFoundError,
   QueryOperationError,
 } from "../core/errors.js";
-import Metadata from "./metadata.js";
-import AsyncMutex from "../utils/mutex.js";
+import Writer from "../io/writer.js";
 import type {
-  BaseDocument,
   CollectionMetadata,
   CollectionOptions,
   ConcurrencyStrategy,
-  ValidationFunction,
+  Document,
+  ValidationFunction
 } from "../types/index.js";
-import Writer from "../io/writer.js";
+import AsyncMutex from "../utils/mutex.js";
+import Cache from "./cache.js";
+import Metadata from "./metadata.js";
 
-export default class Collection<T extends BaseDocument = BaseDocument> {
+export default class Collection<
+  Collections,
+  K extends keyof Collections
+> {
   private basePath: string;
-  private schema: ValidationFunction<T>;
+  private schema: ValidationFunction<Document<Collections, K>>;
   private concurrencyStrategy: ConcurrencyStrategy;
   private metadata: Metadata | null;
-  private cache: Cache<T>;
+  private cache: Cache<Document<Collections, K>>;
 
   #writer: Writer;
 
@@ -46,10 +49,10 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    */
   constructor(
     basePath: string,
-    name: string,
-    options: CollectionOptions<T> = {}
+    name: K,
+    options: CollectionOptions<Document<Collections, K>> = {}
   ) {
-    this.basePath = path.join(basePath, name);
+    this.basePath = path.join(basePath, name as string);
     this.schema = options.schema || (() => true);
     this.concurrencyStrategy = options.concurrencyStrategy || "optimistic";
 
@@ -59,7 +62,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
 
     this.#writer = new Writer(this.basePath);
 
-    this.cache = new Cache<T>(options.cacheTimeout);
+    this.cache = new Cache<Document<Collections, K>>(options.cacheTimeout);
 
     this.ensureCollectionExists();
   }
@@ -155,15 +158,16 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @returns A promise that resolves to the created document.
    * @throws An error if the document failed schema validation or if the collection did not exist.
    */
-  async create(data: T): Promise<T> {
+  async create(data: Omit<Document<Collections, K>, 'id'>) {
+
     // Parallel promise execution
     await Promise.all([
       this.ensureCollectionExists(),
       this.metadata?.loadMetadata(),
     ]);
 
-    const id = data.id ?? crypto.randomUUID(); // Substituição por crypto.randomUUID() mais performática
-    const document = { ...data, id } as T;
+    const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
+    const document = { ...data, id } as Document<Collections, K>;
 
     if (!this.schema(document)) {
       throw new Error("Document failed schema validation");
@@ -196,7 +200,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @param id - The id of the document to read.
    * @returns The document, or null if it does not exist.
    */
-  async read(id: string): Promise<T | null> {
+  async read(id: string) {
     const cached = this.cache.get(id);
     if (
       cached?._lastModified &&
@@ -208,7 +212,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
     try {
       const documentPath = this.getDocumentPath(id);
       const data = await readFile(documentPath, "utf-8");
-      const document = JSON.parse(data) as T;
+      const document = JSON.parse(data) as Document<Collections, K>;
 
       this.cache.update(id, document);
       return document;
@@ -227,7 +231,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @param options.limit - The maximum number of documents to return.
    * @returns A promise that resolves to an array of documents.
    */
-  async readAll(options?: { skip?: number; limit?: number }): Promise<T[]> {
+  async readAll(options?: { skip?: number; limit?: number }) {
     await this.ensureCollectionExists();
 
     const files = await readdir(this.basePath);
@@ -236,7 +240,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
       (file) => file.endsWith(".json") && !file.startsWith("_")
     );
 
-    let results: T[] = [];
+    let results: Document<Collections, K>[] = [];
 
     await Promise.all(
       documentFiles.map(async (file) => {
@@ -290,7 +294,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @throws An error if the lock cannot be acquired or if the update operation
    * encounters an error.
    */
-  async update(id: string, data: Partial<Omit<T, "id">>): Promise<T | null> {
+  async update(id: string, data: Partial<Omit<Document<Collections, K>, "id">>) {
     if (this.concurrencyStrategy === "optimistic") {
       const lockId = await this.acquireLock(id);
       if (!lockId) {
@@ -298,7 +302,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
       }
 
       try {
-        const result = await this._update(id, data);
+        const result = await this.#_update(id, data);
         await this.releaseLock(id, lockId);
         return result;
       } catch (error) {
@@ -306,7 +310,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
         throw error;
       }
     } else {
-      return this._update(id, data);
+      return this.#_update(id, data);
     }
   }
 
@@ -322,10 +326,10 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @returns A promise that resolves to the updated document or null if it does not exist.
    * @throws An error if the document failed schema validation or if the version number has changed.
    */
-  private async _update(
+  async #_update(
     id: string,
-    data: Partial<Omit<T, "id">>
-  ): Promise<T | null> {
+    data: Partial<Omit<Document<Collections, K>, "id">>
+  ) {
     const current = await this.read(id);
     if (!current) return null;
     if (
@@ -347,7 +351,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
           ? (current._version || 0) + 1
           : undefined,
       _lastModified: Date.now(),
-    } as T;
+    } as Document<Collections, K>;
 
     if (!this.schema(updated)) {
       throw new Error("Document failed schema validation");
@@ -366,7 +370,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @param id - The id of the document to be deleted.
    * @returns A promise that resolves to true if the document was successfully deleted, or false if the deletion failed.
    */
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string) {
     const deleteMutex = new AsyncMutex();
 
     try {
@@ -417,13 +421,13 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @returns A promise that resolves to an array of documents that matched the query.
    */
   async query(
-    filter: (doc: T) => boolean,
+    filter: (doc: Document<Collections, K>) => boolean,
     options: {
       concurrent?: boolean;
       batchSize?: number;
       timeout?: number;
     } = {}
-  ): Promise<T[]> {
+  ) {
     const {
       concurrent = true,
       batchSize = 50,
@@ -445,7 +449,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
         )
         .map((file) => file.name);
 
-      const results: T[] = [];
+      const results: Document<Collections, K>[] = [];
 
       if (concurrent) {
         const processFileBatch = async (batch: string[]) => {
@@ -463,7 +467,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
                   ),
                 ]);
 
-                const doc = JSON.parse(documentData as string) as T;
+                const doc = JSON.parse(documentData as string) as Document<Collections, K>;
                 return filter(doc) ? doc : null;
               } catch (error) {
                 console.error(`Error processing file ${filename}:`, error);
@@ -472,7 +476,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
             })
           );
 
-          return batchResults.filter(Boolean) as T[];
+          return batchResults.filter(Boolean) as Document<Collections, K>[];
         };
 
         for (let i = 0; i < jsonFiles.length; i += batchSize) {
@@ -486,7 +490,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
           try {
             const documentPath = path.join(this.basePath, fileName);
             const documentData = await readFile(documentPath, "utf-8");
-            const doc = JSON.parse(documentData) as T;
+            const doc = JSON.parse(documentData) as Document<Collections, K>;
 
             if (filter(doc)) {
               results.push(doc);
