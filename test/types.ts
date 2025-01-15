@@ -1,4 +1,4 @@
-import type { BaseDocument } from "../src/type";
+import type { BaseDocument } from "../src/types";
 
 interface TestUser extends BaseDocument {
 	id: string;

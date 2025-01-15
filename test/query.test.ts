@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import JasonDB from "../src/core";
+import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
 const testFilename = "test_query_db";
