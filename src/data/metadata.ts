@@ -1,8 +1,8 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import AsyncMutex from "./mutex.js";
-import type { CollectionMetadata } from "./type.js";
-import { MetadataPersistenceError } from "./errors.js";
+import AsyncMutex from "../utils/mutex.js";
+import type { CollectionMetadata } from "../types/type.js";
+import { MetadataPersistenceError } from "../core/errors.js";
 export default class Metadata {
   #metadataPath: string;
   #metadata!: CollectionMetadata;
