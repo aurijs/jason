@@ -1,5 +1,5 @@
 {
-  "name": "jason",
+  "name": "@aurios/jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
   "version": "1.0.2",
   "scripts": {
