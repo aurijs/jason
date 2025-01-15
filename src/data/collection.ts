@@ -29,12 +29,11 @@ export default class Collection<
   Collections,
   K extends keyof Collections
 > {
-  private basePath: string;
-  private schema: ValidationFunction<Document<Collections, K>>;
-  private concurrencyStrategy: ConcurrencyStrategy;
-  private metadata: Metadata | null;
-  private cache: Cache<Document<Collections, K>>;
-
+  #basePath: string;
+  #schema: ValidationFunction<Document<Collections, K>>;
+  #concurrencyStrategy: ConcurrencyStrategy;
+  #metadata: Metadata | null;
+  #cache: Cache<Document<Collections, K>>;
   #writer: Writer;
 
   /**
@@ -52,17 +51,17 @@ export default class Collection<
     name: K,
     options: CollectionOptions<Document<Collections, K>> = {}
   ) {
-    this.basePath = path.join(basePath, name as string);
-    this.schema = options.schema || (() => true);
-    this.concurrencyStrategy = options.concurrencyStrategy || "optimistic";
+    this.#basePath = path.join(basePath, name as string);
+    this.#schema = options.schema || (() => true);
+    this.#concurrencyStrategy = options.concurrencyStrategy || "optimistic";
 
-    this.metadata = options.generateMetadata
-      ? new Metadata(this.basePath)
+    this.#metadata = options.generateMetadata
+      ? new Metadata(this.#basePath)
       : null;
 
-    this.#writer = new Writer(this.basePath);
+    this.#writer = new Writer(this.#basePath);
 
-    this.cache = new Cache<Document<Collections, K>>(options.cacheTimeout);
+    this.#cache = new Cache<Document<Collections, K>>(options.cacheTimeout);
 
     this.ensureCollectionExists();
   }
@@ -77,19 +76,19 @@ export default class Collection<
    */
   private async ensureCollectionExists(): Promise<void> {
     try {
-      await access(this.basePath);
+      await access(this.#basePath);
       return;
     } catch {
       try {
-        await mkdir(this.basePath, { recursive: true });
-        await this.metadata?.saveMetadata();
+        await mkdir(this.#basePath, { recursive: true });
+        await this.#metadata?.saveMetadata();
       } catch (error) {
         console.error("Failed to create collection directory", {
-          path: this.basePath,
+          path: this.#basePath,
           error: error instanceof Error ? error.message : "Unknown error",
         });
         throw new Error(
-          `Failed to create collection directory: ${this.basePath}`
+          `Failed to create collection directory: ${this.#basePath}`
         );
       }
     }
@@ -102,7 +101,7 @@ export default class Collection<
    * @returns The path to the document.
    */
   private getDocumentPath(id: string): string {
-    return path.join(this.basePath, `${id}.json`);
+    return path.join(this.#basePath, `${id}.json`);
   }
 
   /**
@@ -163,28 +162,28 @@ export default class Collection<
     // Parallel promise execution
     await Promise.all([
       this.ensureCollectionExists(),
-      this.metadata?.loadMetadata(),
+      this.#metadata?.loadMetadata(),
     ]);
 
     const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
     const document = { ...data, id } as Document<Collections, K>;
 
-    if (!this.schema(document)) {
+    if (!this.#schema(document)) {
       throw new Error("Document failed schema validation");
     }
 
     const documentMetadata = {
-      ...this.metadata,
-      documentCount: (this.metadata?.documentCount || 0) + 1,
+      ...this.#metadata,
+      documentCount: (this.#metadata?.documentCount || 0) + 1,
       lastModified: Date.now(),
     };
 
     await Promise.all([
       this.#writer.write(id, JSON.stringify(document)),
-      this.metadata?.saveMetadata(documentMetadata),
+      this.#metadata?.saveMetadata(documentMetadata),
     ]);
 
-    this.cache.update(id, document);
+    this.#cache.update(id, document);
 
     return document;
   }
@@ -201,10 +200,10 @@ export default class Collection<
    * @returns The document, or null if it does not exist.
    */
   async read(id: string) {
-    const cached = this.cache.get(id);
+    const cached = this.#cache.get(id);
     if (
       cached?._lastModified &&
-      Date.now() - cached._lastModified < this.cache.timeout
+      Date.now() - cached._lastModified < this.#cache.timeout
     ) {
       return cached;
     }
@@ -214,7 +213,7 @@ export default class Collection<
       const data = await readFile(documentPath, "utf-8");
       const document = JSON.parse(data) as Document<Collections, K>;
 
-      this.cache.update(id, document);
+      this.#cache.update(id, document);
       return document;
     } catch {
       return null;
@@ -234,7 +233,7 @@ export default class Collection<
   async readAll(options?: { skip?: number; limit?: number }) {
     await this.ensureCollectionExists();
 
-    const files = await readdir(this.basePath);
+    const files = await readdir(this.#basePath);
 
     const documentFiles = files.filter(
       (file) => file.endsWith(".json") && !file.startsWith("_")
@@ -295,7 +294,7 @@ export default class Collection<
    * encounters an error.
    */
   async update(id: string, data: Partial<Omit<Document<Collections, K>, "id">>) {
-    if (this.concurrencyStrategy === "optimistic") {
+    if (this.#concurrencyStrategy === "optimistic") {
       const lockId = await this.acquireLock(id);
       if (!lockId) {
         throw new Error("Failed to acquire lock");
@@ -333,7 +332,7 @@ export default class Collection<
     const current = await this.read(id);
     if (!current) return null;
     if (
-      this.concurrencyStrategy === "versioning" &&
+      this.#concurrencyStrategy === "versioning" &&
       data._version !== undefined &&
       data._version !== current._version
     ) {
@@ -347,20 +346,20 @@ export default class Collection<
       ...data,
       id: current.id,
       _version:
-        this.concurrencyStrategy === "versioning"
+        this.#concurrencyStrategy === "versioning"
           ? (current._version || 0) + 1
           : undefined,
       _lastModified: Date.now(),
     } as Document<Collections, K>;
 
-    if (!this.schema(updated)) {
+    if (!this.#schema(updated)) {
       throw new Error("Document failed schema validation");
     }
 
     const documentPath = this.getDocumentPath(id);
     await writeFile(documentPath, JSON.stringify(updated, null, 2));
-    await this.metadata?.saveMetadata();
-    this.cache.update(id, updated);
+    await this.#metadata?.saveMetadata();
+    this.#cache.update(id, updated);
     return updated;
   }
 
@@ -381,7 +380,7 @@ export default class Collection<
       // Operações concorrentes otimizadas
       const [documentExists] = await Promise.allSettled([
         access(documentPath),
-        this.cache.get(id), // Verifica se o documento existe na cache
+        this.#cache.get(id), // Verifica se o documento existe na cache
       ]);
 
       if (documentExists.status === "rejected") {
@@ -396,13 +395,13 @@ export default class Collection<
       ]);
 
       const updatedMetadata: Partial<CollectionMetadata> = {
-        documentCount: (this.metadata?.documentCount || 0) - 1,
+        documentCount: (this.#metadata?.documentCount || 0) - 1,
         lastModified: Date.now(),
       };
 
       await Promise.all([
-        this.metadata?.saveMetadata(updatedMetadata),
-        this.cache.delete(id),
+        this.#metadata?.saveMetadata(updatedMetadata),
+        this.#cache.delete(id),
       ]);
 
       return true;
@@ -439,7 +438,7 @@ export default class Collection<
     try {
       await queryMutex.lock();
 
-      const files = await readdir(this.basePath, { withFileTypes: true });
+      const files = await readdir(this.#basePath, { withFileTypes: true });
       const jsonFiles = files
         .filter(
           (file) =>
@@ -456,7 +455,7 @@ export default class Collection<
           const batchResults = await Promise.all(
             batch.map(async (filename) => {
               try {
-                const filePath = path.join(this.basePath, filename);
+                const filePath = path.join(this.#basePath, filename);
                 const documentData = await Promise.race([
                   readFile(filePath, "utf-8"),
                   new Promise<void>((_, reject) =>
@@ -488,7 +487,7 @@ export default class Collection<
         // Sequencial processing for no concurrency scenario
         for (const fileName of jsonFiles) {
           try {
-            const documentPath = path.join(this.basePath, fileName);
+            const documentPath = path.join(this.#basePath, fileName);
             const documentData = await readFile(documentPath, "utf-8");
             const doc = JSON.parse(documentData) as Document<Collections, K>;
 
