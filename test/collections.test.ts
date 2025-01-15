@@ -2,26 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import JasonDB from "../src/core/main";
-import type { BaseDocument } from "../src/types";
-
-interface TestUser extends BaseDocument {
-	id: string;
-	name: string;
-	email: string;
-	age: number;
-}
-
-interface TestPost extends BaseDocument {
-	id: string;
-	title: string;
-	content: string;
-	authorId: string;
-}
-
-interface TestCollections {
-	users: TestUser[];
-	posts: TestPost[];
-}
+import type { TestCollections, TestUser } from "./types";
 
 const testFilename = "test_collection_db";
 const filePath = path.join(process.cwd(), `${testFilename}`);
@@ -35,9 +16,12 @@ describe("Collection tests", () => {
 
 	afterEach(async () => {
 		try {
-			await rm(filePath, { recursive: true });
+			await rm(filePath, { recursive: true, force: true });
 		} catch (error) {
-			console.error("Error cleaning up test directory:", error);
+			if (error.code !== 'ENOENT') {
+				console.error("Error cleaning up test directory:", error);
+				throw error;
+			}
 		}
 	});
 

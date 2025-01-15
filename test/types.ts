@@ -1,13 +1,12 @@
-import type { BaseDocument } from "../src/types";
 
-interface TestUser extends BaseDocument {
+export interface TestUser {
 	id: string;
 	name: string;
 	email: string;
 	age: number;
 }
 
-export interface TestPost extends BaseDocument {
+export interface TestPost {
 	id: string;
 	title: string;
 	content: string;
