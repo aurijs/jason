@@ -3,12 +3,33 @@ import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { retryAsyncOperation } from "../utils/utils.js";
+import { derived, state, batch, effect } from '../reactive/index.js'
 
 type Resolve = () => void;
 type Reject = (error: Error) => void;
 
+interface WriterState {
+  locked: boolean;
+  pendingWrites: [string, string][];
+  currentFile: string | null;
+  error: Error | null;
+}
+
 export default class Writer {
   #basePath: string;
+
+  #state = state<WriterState>({
+    locked: false,
+    pendingWrites: [],
+    currentFile: null as string | null,
+    error: null as Error | null
+  });
+
+  #status = derived(() => ({
+    isLoked: this.#state.locked,
+    hasPending: this.#state.pendingWrites.length > 0,
+  }));
+
   #locked = false;
 
   #prev: [Resolve, Reject] | null = null;
@@ -22,6 +43,21 @@ export default class Writer {
    */
   constructor(basePath: string) {
     this.#basePath = basePath;
+
+    // Effect to handle pending writes
+    effect(() => {
+      if (!this.#state.locked && this.#state.pendingWrites.length > 0) {
+        // Get first pending write
+        const [fileName, data] = this.#state.pendingWrites[0];
+
+        batch(() => {
+          // Remove first item from pending writes
+          this.#state.pendingWrites = this.#state.pendingWrites.slice(1);
+          this.#state.currentFile = fileName;
+          this.#write(fileName, data);
+        });
+      }
+    });
   }
 
   /**
@@ -87,41 +123,26 @@ export default class Writer {
    * @returns A promise that resolves when the data has been written.
    */
   async #write(fileName: string, data: string): Promise<true> {
-    // Lock file
-    this.#locked = true;
-
-    const fullPath = join(this.#basePath, `${fileName}.json`);
-    const temporaryFilename = this.#generateTemporaryFilename(fileName);
+    this.#state.locked = true;
 
     try {
-      // Atomic write
-      await writeFile(temporaryFilename, data, "utf-8");
-      await retryAsyncOperation(async () => {
-        await rename(temporaryFilename, fullPath);
-      }, 10);
+      const fullPath = join(this.#basePath, `${fileName}.json`);
+      const temporaryFilename = this.#generateTemporaryFilename(fileName);
 
-      // Call resolve
-      this.#prev?.[0]();
+      await writeFile(temporaryFilename, data, { encoding: "utf-8", flag: 'wx' });
+      await retryAsyncOperation(() => rename(temporaryFilename, fullPath), 10);
 
       return true;
     } catch (err) {
-      // Call reject
       if (err instanceof Error) {
-        this.#prev?.[1](err);
+        this.#state.error = err;
       }
       throw err;
     } finally {
-      // Unlock file
-      this.#locked = false;
-
-      this.#prev = this.#next;
-      this.#next = this.#nextPromise = null;
-
-      if (this.#nextData !== null) {
-        const nextData = this.#nextData;
-        this.#nextData = null;
-        await this.write(fileName, nextData);
-      }
+      batch(() => {
+        this.#state.locked = false;
+        this.#state.currentFile = null;
+      });
     }
   }
 
@@ -136,7 +157,10 @@ export default class Writer {
    * @returns A promise that resolves when the data has been written.
    */
   write(fileName: string, data: string) {
-    if (this.#locked) return this.#add(data);
+    if (this.#state.locked) {
+      this.#state.pendingWrites.push([fileName, data]);
+      return true;
+    }
     return this.#write(fileName, data);
   }
 }
