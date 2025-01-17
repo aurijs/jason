@@ -15,9 +15,12 @@ beforeEach(async () => {
 
 afterEach(async () => {
     try {
-        await rm(filePath, { recursive: true });
+        await rm(filePath, { recursive: true, force: true });
     } catch (error) {
-        console.error("Error cleaning up test directory:", error);
+        if (error.code !== 'ENOENT') {
+            console.error("Error cleaning up test directory:", error);
+            throw error;
+        }
     }
 });
 describe('CREATE USER tests', () => {
