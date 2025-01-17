@@ -1,11 +1,43 @@
+import { derived, effect, state } from "../reactive/index.js";
 import type { BaseDocument } from "../types/index.js";
 
+interface CacheState<T> {
+	items: Map<string, T>;
+	timestamps: Map<string, number>;
+	timeout: number;
+}
+
 export default class Cache<T = BaseDocument> {
+
+	#state = state<CacheState<T>>({
+		items: new Map(),
+		timestamps: new Map(),
+		timeout: 60000
+	});
+
+	#stats = derived(() => ({
+		size: this.#state.items.size,
+		oldestItem: Math.min(...this.#state.timestamps.values() || [Date.now()]),
+		newestItem: Math.max(...this.#state.timestamps.values() || [Date.now()])
+	}));
+
+
 	#cache = new Map<string, T>();
 	#cacheTimeout = 60000;
 
 	constructor(cacheTimout = 60000) {
 		this.#cacheTimeout = cacheTimout;
+
+		effect(() => {
+			const now = Date.now();
+			const timeout = this.#state.timeout;
+
+			for (const [key, timestamp] of this.#state.timestamps) {
+				if (now - timestamp > timeout) {
+					this.delete(key);
+				}
+			}
+		})
 	}
 
 	/**
@@ -14,7 +46,7 @@ export default class Cache<T = BaseDocument> {
 	 * @returns The duration in milliseconds after which cached items are automatically removed.
 	 */
 	get timeout() {
-		return this.#cacheTimeout;
+		return this.#state.timeout;
 	}
 
 	/**
@@ -23,7 +55,7 @@ export default class Cache<T = BaseDocument> {
 	 * @param timeout - The duration in milliseconds after which the cached item should be removed.
 	 */
 	set timeout(timeout: number) {
-		this.#cacheTimeout = timeout;
+		this.#state.timeout = timeout;
 	}
 
 	/**
@@ -35,8 +67,9 @@ export default class Cache<T = BaseDocument> {
 	 * The item will be automatically removed from the cache after the specified cache timeout.
 	 */
 	update(id: string, item: T): void {
-		this.#cache.set(id, item);
-		setTimeout(() => this.#cache.delete(id), this.#cacheTimeout);
+		this.#state.items.push([id, item]);
+		this.#state.timestamps.push([id, Date.now()]);
+		setTimeout(() => this.delete(id), this.#state.timeout);
 	}
 
 	/**
@@ -45,7 +78,7 @@ export default class Cache<T = BaseDocument> {
 	 * @param id - The id of the item to be retrieved.
 	 */
 	get(id: string): T | null {
-		return this.#cache.get(id) || null;
+		return this.#state.items.filter(item => item[0] === id)[0][1] || null;
 	}
 
 	/**
@@ -54,6 +87,7 @@ export default class Cache<T = BaseDocument> {
 	 * @param id - The id of the item to be removed from the cache.
 	 */
 	delete(id: string): void {
-		this.#cache.delete(id);
+		this.#state.items = this.#state.items.filter(item => item[0] !== id);
+		this.#state.timestamps = this.#state.timestamps.filter(item => item[0] !== id);
 	}
 }
