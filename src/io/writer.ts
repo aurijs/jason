@@ -30,13 +30,6 @@ export default class Writer {
     hasPending: this.#state.pendingWrites.length > 0,
   }));
 
-  #locked = false;
-
-  #prev: [Resolve, Reject] | null = null;
-  #next: [Resolve, Reject] | null = null;
-  #nextPromise: Promise<void> | null = null;
-  #nextData: string | null = null;
-
   /**
    * Constructs a new Writer instance.
    * @param basePath The path to the file to write to.
@@ -78,33 +71,6 @@ export default class Writer {
     const randomPart = crypto.randomUUID();
 
     return join(dir, `.${Date.now()}-${randomPart}.tmp`);
-  }
-
-  /**
-   * Adds data to be written to the file.
-   *
-   * Stores the most recent data to be written and creates a promise
-   * that resolves when the data is successfully written. Subsequent
-   * calls to this method will replace the data to be written with the
-   * new data, and return a promise that resolves when the current data
-   * is written.
-   *
-   * @param data - The data to be written to the file.
-   * @returns A promise that resolves when the data has been written.
-   */
-  #add(data: string): Promise<true> {
-    // Only keep most recent data
-    this.#nextData = data;
-
-    // Create a singleton promise to resolve all next promises once next data is written
-    this.#nextPromise ||= new Promise((resolve, reject) => {
-      this.#next = [resolve, reject];
-    });
-
-    // Return a promise that will resolve at the same time as next promise
-    return new Promise((resolve, reject) => {
-      this.#nextPromise?.then(() => resolve(true)).catch(reject);
-    });
   }
 
   /**
@@ -157,9 +123,9 @@ export default class Writer {
    * @returns A promise that resolves when the data has been written.
    */
   write(fileName: string, data: string) {
-    if (this.#state.locked) {
+    if (this.#status.value.isLoked) {
       this.#state.pendingWrites.push([fileName, data]);
-      return true;
+      return;
     }
     return this.#write(fileName, data);
   }
