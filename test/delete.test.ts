@@ -4,7 +4,7 @@ import path from "node:path";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-describe("USER tests", () => {
+describe.concurrent("USER tests", () => {
 	const testFilename = "test_delete_db";
 	const filePath = path.join(process.cwd(), `${testFilename}`);
 	let db: JasonDB<TestCollections>;

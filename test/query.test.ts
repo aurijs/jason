@@ -4,7 +4,7 @@ import path from "node:path";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-describe("POST tests", () => {
+describe.concurrent("POST tests", () => {
 	const testFilename = "test_query_db";
 	const filePath = path.join(process.cwd(), `${testFilename}`);
 

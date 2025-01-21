@@ -7,7 +7,7 @@ import type { TestCollections, TestUser } from "./types";
 const testFilename = "test_collection_db";
 const filePath = path.join(process.cwd(), `${testFilename}`);
 
-describe("Collection tests", () => {
+describe.concurrent("Collection tests", () => {
 	let db: JasonDB<TestCollections>;
 
 	beforeEach(() => {
