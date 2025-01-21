@@ -158,7 +158,8 @@ export default class Collection<
    * @throws An error if the document failed schema validation or if the collection did not exist.
    */
   async create(data: Omit<Document<Collections, K>, 'id'>) {
-
+    try {
+      
     // Parallel promise execution
     await Promise.all([
       this.ensureCollectionExists(),
@@ -186,6 +187,12 @@ export default class Collection<
     this.#cache.update(id, document);
 
     return document;
+
+    } catch (error) {
+      console.dir('error',this.#writer.status);
+
+      throw new Error("Failed to create document");
+    }
   }
 
   /**

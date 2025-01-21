@@ -140,13 +140,13 @@ export default class Metadata {
       });
 
       this.#metadata = updatedMetadata;
-    } catch (error: Error | any) {
+    } catch (error) {
       console.error("Metadata Persistence Error:", {
         path: this.#metadataPath,
         errorCode: error instanceof Error ? error.message : "UNKNOWN_ERROR",
       });
 
-      throw new MetadataPersistenceError("Failed to save metadata", error);
+      throw new MetadataPersistenceError("Failed to save metadata", error as Error);
     } finally {
       updateMutex.unlock();
     }
