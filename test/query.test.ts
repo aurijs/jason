@@ -4,26 +4,25 @@ import path from "node:path";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-const testFilename = "test_query_db";
-const filePath = path.join(process.cwd(), `${testFilename}`);
-
-let db: JasonDB<TestCollections>;
-beforeEach(() => {
-    db = new JasonDB(testFilename);
-});
-
-afterEach(async () => {
-    try {
-        await rm(filePath, { recursive: true, force: true });
-    } catch (error) {
-        if (error.code !== 'ENOENT') {
-            console.error("Error cleaning up test directory:", error);
-            throw error;
-        }
-    }
-});
-
 describe("POST tests", () => {
+    const testFilename = "test_query_db";
+    const filePath = path.join(process.cwd(), `${testFilename}`);
+    
+    let db: JasonDB<TestCollections>;
+    beforeEach(() => {
+        db = new JasonDB(testFilename);
+    });
+    
+    afterEach(async () => {
+        try {
+            await rm(filePath, { recursive: true, force: true });
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                console.error("Error cleaning up test directory:", error);
+                throw error;
+            }
+        }
+    });
 
     it("should query posts by authorId", async () => {
         const posts = db.collection("posts");

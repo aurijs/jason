@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { rm } from "node:fs/promises";
+import { access, constants, rm } from "node:fs/promises";
 import path from "node:path";
 import JasonDB from "../src/core/main";
 import type { TestCollections, TestUser } from "./types";
@@ -16,6 +16,8 @@ describe("Collection tests", () => {
 
 	afterEach(async () => {
 		try {
+			await access(filePath, constants.R_OK);
+	
 			await rm(filePath, { recursive: true, force: true });
 		} catch (error) {
 			if (error.code !== 'ENOENT') {
