@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { access, constants, rm } from "node:fs/promises";
+import { constants, access, rm } from "node:fs/promises";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
 import type { TestCollections, TestUser } from "./types";
 
@@ -16,11 +16,9 @@ describe("Collection tests", () => {
 
 	afterEach(async () => {
 		try {
-			await access(filePath, constants.R_OK);
-	
 			await rm(filePath, { recursive: true, force: true });
 		} catch (error) {
-			if (error.code !== 'ENOENT') {
+			if (error.code !== "ENOENT") {
 				console.error("Error cleaning up test directory:", error);
 				throw error;
 			}
@@ -44,7 +42,7 @@ describe("Collection tests", () => {
 		});
 
 		const userData = {
-			id: '1',
+			id: "1",
 			name: "Cache Test",
 			email: "cache@example.com",
 			age: 30,
@@ -63,14 +61,14 @@ describe("Collection tests", () => {
 		});
 
 		const validUser = {
-			id: '1',
+			id: "1",
 			name: "Adult User",
 			email: "adult@example.com",
 			age: 25,
 		};
 
 		const invalidUser = {
-			id: '2',
+			id: "2",
 			name: "Minor User",
 			email: "minor@example.com",
 			age: 15,
@@ -91,7 +89,7 @@ describe("Collection tests", () => {
 		});
 
 		const userData = {
-			id: '1',
+			id: "1",
 			name: "Version Test",
 			email: "version@example.com",
 			age: 30,
@@ -103,5 +101,4 @@ describe("Collection tests", () => {
 		const updated = await users.update(created.id, { age: 31 });
 		expect(updated?._version).toBe(2);
 	});
-
 });
