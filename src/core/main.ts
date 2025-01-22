@@ -79,6 +79,7 @@ export default class JasonDB<T> {
 	 * @param options.schema - A validation function for the collection's documents.
 	 * @param options.concurrencyStrategy - The concurrency strategy to use for the collection.
 	 * @param options.cacheTimeout - The cache timeout in milliseconds.
+	 * @param options.generateMetadata - Whether to generate metadata for the collection.
 	 * @returns The collection instance associated with the given name.
 	 */
 	collection<K extends keyof T>(

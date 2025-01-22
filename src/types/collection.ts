@@ -26,6 +26,7 @@ export interface BaseCollections {
  * @property schema - An optional validation function for documents in the collection.
  * @property concurrencyStrategy - An optional concurrency strategy for the collection.
  * @property cacheTimeout - An optional cache timeout in milliseconds.
+ * @property generateMetadata - An optional flag to generate metadata for documents in the collection.
  */
 export interface CollectionOptions<T = BaseDocument> {
     initialData?: T[];
