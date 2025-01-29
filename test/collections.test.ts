@@ -7,7 +7,7 @@ import type { TestCollections, TestUser } from "./types";
 const testFilename = "test_collection_db";
 const filePath = path.join(process.cwd(), `${testFilename}`);
 
-describe.concurrent("Collection tests", () => {
+describe("Collection tests", () => {
 	let db: JasonDB<TestCollections>;
 
 	beforeEach(() => {
@@ -55,7 +55,7 @@ describe.concurrent("Collection tests", () => {
 		expect(firstRead).toEqual(secondRead);
 	});
 
-	it.concurrent("should respect schema validation", async () => {
+	it("should respect schema validation", async () => {
 		const users = db.collection("users", {
 			schema: (user: TestUser) => user.age >= 18,
 		});

@@ -189,8 +189,6 @@ export default class Collection<
     return document;
 
     } catch (error) {
-      console.dir('error',this.#writer.status);
-
       throw new Error("Failed to create document");
     }
   }

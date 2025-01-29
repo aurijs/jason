@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
 import type { TestCollections, TestPost } from "./types";
 
-describe.concurrent("CREATE tests", () => {
-	const testFilename = "test_create_db";
+describe("CREATE tests", () => {
+	const testFilename = `test_create_db_${crypto.randomUUID()}`;
 	const filePath = path.join(process.cwd(), `${testFilename}`);
 
 	let db: JasonDB<TestCollections>;
@@ -25,7 +25,7 @@ describe.concurrent("CREATE tests", () => {
 		}
 	});
 
-	describe.concurrent("CREATE USER tests", () => {
+	describe("CREATE USER tests", () => {
 		it("should create a user", async () => {
 			const users = db.collection("users");
 			const userData = {
@@ -58,7 +58,7 @@ describe.concurrent("CREATE tests", () => {
 		});
 	});
 
-	describe.concurrent("CREATE POST collection", () => {
+	describe("CREATE POST collection", () => {
 		it("should create a new post", async () => {
 			const posts = db.collection("posts");
 			const postData = {

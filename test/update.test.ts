@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-describe.concurrent("UPDATE tests", () => {
+describe("UPDATE tests", () => {
 	const testFilename = "test_update_db";
 	const filePath = path.join(process.cwd(), `${testFilename}`);
 	let db: JasonDB<TestCollections>;
@@ -33,7 +33,7 @@ describe.concurrent("UPDATE tests", () => {
 		});
 	});
 
-	describe.concurrent("POST tests", () => {
+	describe("POST tests", () => {
 		it("should update a post", async () => {
 			const posts = db.collection("posts");
 
@@ -49,6 +49,8 @@ describe.concurrent("UPDATE tests", () => {
 				content: "Updated content",
 			});
 
+			console.log("updated", updated);
+			
 			expect(updated).toBeDefined();
 			expect(updated?.id).toBe(created.id);
 			expect(updated?.title).toBe(postData.title);
