@@ -1,6 +1,6 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import AsyncMutex from "../utils/mutex.js";
+import { Mutex } from "async-mutex";
 import type { CollectionMetadata } from "../types/index.js";
 import { MetadataPersistenceError } from "../core/errors.js";
 export default class Metadata {
@@ -55,9 +55,9 @@ export default class Metadata {
    * @returns A promise that resolves when the metadata is loaded.
    */
   async loadMetadata(): Promise<void> {
-    const metadataLoadMuxex = new AsyncMutex();
+    const metadataLoadMuxex = new Mutex();
     try {
-      metadataLoadMuxex.lock();
+      await metadataLoadMuxex.acquire();
 
       const filestats = await stat(this.#metadataPath);
 
@@ -110,7 +110,7 @@ export default class Metadata {
 
       await this.saveMetadata();
     } finally {
-      metadataLoadMuxex.unlock();
+      metadataLoadMuxex.release();
     }
   }
 
@@ -122,9 +122,9 @@ export default class Metadata {
    * @returns A promise that resolves when the metadata is saved.
    */
   async saveMetadata(metadata?: Partial<CollectionMetadata>): Promise<void> {
-    const updateMutex = new AsyncMutex();
+    const updateMutex = new Mutex();
     try {
-      updateMutex.lock();
+     await updateMutex.acquire();
 
       const updatedMetadata: CollectionMetadata = {
         ...this.#metadata,
@@ -146,9 +146,12 @@ export default class Metadata {
         errorCode: error instanceof Error ? error.message : "UNKNOWN_ERROR",
       });
 
-      throw new MetadataPersistenceError("Failed to save metadata", error as Error);
+      throw new MetadataPersistenceError(
+        "Failed to save metadata",
+        error as Error
+      );
     } finally {
-      updateMutex.unlock();
+      updateMutex.release();
     }
   }
 }
