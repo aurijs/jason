@@ -1,3 +1,4 @@
+import { parse, stringify } from "devalue";
 import crypto from "node:crypto";
 import {
   access,
@@ -8,27 +9,21 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import {
-  DeleteOperationError,
-  DocumentNotFoundError,
-  QueryOperationError,
-} from "../core/errors.js";
+import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
 import Writer from "../io/writer.js";
 import type {
   CollectionMetadata,
   CollectionOptions,
   ConcurrencyStrategy,
   Document,
-  ValidationFunction
+  ValidationFunction,
 } from "../types/index.js";
-import AsyncMutex from "../utils/mutex.js";
+// import AsyncMutex from "../utils/mutex.js";
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
+import { Mutex } from "async-mutex";
 
-export default class Collection<
-  Collections,
-  K extends keyof Collections
-> {
+export default class Collection<Collections, K extends keyof Collections> {
   #basePath: string;
   #schema: ValidationFunction<Document<Collections, K>>;
   #concurrencyStrategy: ConcurrencyStrategy;
@@ -142,7 +137,7 @@ export default class Collection<
       if (savedLockId === lockId) {
         await unlink(lockPath);
       }
-    } catch { }
+    } catch {}
   }
 
   /**
@@ -157,38 +152,39 @@ export default class Collection<
    * @returns A promise that resolves to the created document.
    * @throws An error if the document failed schema validation or if the collection did not exist.
    */
-  async create(data: Omit<Document<Collections, K>, 'id'>) {
+  async create(data: Omit<Document<Collections, K>, "id">) {
     try {
-      
-    // Parallel promise execution
-    await Promise.all([
-      this.ensureCollectionExists(),
-      this.#metadata?.loadMetadata(),
-    ]);
+      // Parallel promise execution
+      await Promise.all([
+        this.ensureCollectionExists(),
+        this.#metadata?.loadMetadata(),
+      ]);
 
-    const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
-    const document = { ...data, id } as Document<Collections, K>;
+      const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
+      const document = { ...data, id } as Document<Collections, K>;
 
-    if (!this.#schema(document)) {
-      throw new Error("Document failed schema validation");
-    }
+      if (!this.#schema(document)) {
+        throw new Error("Document failed schema validation");
+      }
 
-    const documentMetadata = {
-      ...this.#metadata,
-      documentCount: (this.#metadata?.documentCount || 0) + 1,
-      lastModified: Date.now(),
-    };
+      const documentMetadata = {
+        ...this.#metadata,
+        documentCount: (this.#metadata?.documentCount || 0) + 1,
+        lastModified: Date.now(),
+      };
 
-    await Promise.all([
-      this.#writer.write(id, JSON.stringify(document)),
-      this.#metadata?.saveMetadata(documentMetadata),
-    ]);
+      await Promise.all([
+        this.#writer.write(id, stringify(document)),
+        this.#metadata?.saveMetadata(documentMetadata),
+      ]);
 
-    this.#cache.update(id, document);
+      this.#cache.update(id, document);
 
-    return document;
-
+      return document;
     } catch (error) {
+      if ((error as Error).message === "Document failed schema validation") {
+        throw error;
+      }
       throw new Error("Failed to create document");
     }
   }
@@ -206,17 +202,14 @@ export default class Collection<
    */
   async read(id: string) {
     const cached = this.#cache.get(id);
-    if (
-      cached?._lastModified &&
-      Date.now() - cached._lastModified < this.#cache.timeout
-    ) {
-      return cached;
-    }
+    if (cached) return cached;
 
     try {
       const documentPath = this.getDocumentPath(id);
       const data = await readFile(documentPath, "utf-8");
-      const document = JSON.parse(data) as Document<Collections, K>;
+      const document = parse(data) as Document<Collections, K>;
+
+      document._lastModified = Date.now();
 
       this.#cache.update(id, document);
       return document;
@@ -236,34 +229,20 @@ export default class Collection<
    * @returns A promise that resolves to an array of documents.
    */
   async readAll(options?: { skip?: number; limit?: number }) {
-    await this.ensureCollectionExists();
+    const files = await readdir(this.#basePath, { withFileTypes: true });
+    const batchSize = 100;
 
-    const files = await readdir(this.#basePath);
-
-    const documentFiles = files.filter(
-      (file) => file.endsWith(".json") && !file.startsWith("_")
-    );
-
-    let results: Document<Collections, K>[] = [];
-
-    await Promise.all(
-      documentFiles.map(async (file) => {
-        const id = file.replace(".json", "");
-        const doc = await this.read(id);
-        if (doc !== null) {
-          results.push(doc);
-        }
-      })
-    );
-
-    if (options?.skip) {
-      results = results.slice(options.skip);
+    let result: Document<Collections, K>[] = [];
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map((file) => this.read(file.name.replace(".json", "")))
+      );
+      result = result.concat(
+        batchResults.filter(Boolean) as Document<Collections, K>[]
+      );
     }
-    if (options?.limit) {
-      results = results.slice(0, options.limit);
-    }
-
-    return results;
+    return result;
   }
 
   /**
@@ -298,7 +277,10 @@ export default class Collection<
    * @throws An error if the lock cannot be acquired or if the update operation
    * encounters an error.
    */
-  async update(id: string, data: Partial<Omit<Document<Collections, K>, "id">>) {
+  async update(
+    id: string,
+    data: Partial<Omit<Document<Collections, K>, "id">>
+  ) {
     if (this.#concurrencyStrategy === "optimistic") {
       const lockId = await this.acquireLock(id);
       if (!lockId) {
@@ -361,8 +343,7 @@ export default class Collection<
       throw new Error("Document failed schema validation");
     }
 
-    const documentPath = this.getDocumentPath(id);
-    await writeFile(documentPath, JSON.stringify(updated, null, 2));
+    await this.#writer.write(id, stringify(updated));
     await this.#metadata?.saveMetadata();
     this.#cache.update(id, updated);
     return updated;
@@ -375,10 +356,10 @@ export default class Collection<
    * @returns A promise that resolves to true if the document was successfully deleted, or false if the deletion failed.
    */
   async delete(id: string) {
-    const deleteMutex = new AsyncMutex();
+    const deleteMutex = new Mutex();
 
     try {
-      deleteMutex.lock();
+      await deleteMutex.acquire();
 
       const documentPath = this.getDocumentPath(id);
 
@@ -414,106 +395,45 @@ export default class Collection<
       // Erro customizado para melhor rastreabilidade
       throw new DeleteOperationError("Failed to delete document", error);
     } finally {
-      deleteMutex.unlock();
+      deleteMutex.release();
     }
   }
 
   /**
-   * Queries the collection for documents matching the given filter function.
+   * Executes a query on the collection.
    *
-   * @param filter - A function that takes a document as an argument and returns a boolean indicating whether the document matches the query.
-   * @returns A promise that resolves to an array of documents that matched the query.
+   * The query is executed using a custom filter function that takes a document
+   * as an argument and returns a boolean indicating whether the document should
+   * be included in the result set.
+   *
+   * @param filter - The filter function to apply to the documents in the collection.
+   * @param options - Optional parameters to control the query execution.
+   * @param options.concurrent - Whether to execute the query concurrently.
+   * @param options.batchSize - The number of documents to process in parallel.
+   * @returns A promise that resolves to an array of documents that match the filter.
    */
   async query(
     filter: (doc: Document<Collections, K>) => boolean,
     options: {
       concurrent?: boolean;
       batchSize?: number;
-      timeout?: number;
     } = {}
   ) {
-    const {
-      concurrent = true,
-      batchSize = 50,
-      timeout = 5000, // 5 segundos timeout global
-    } = options;
+    const files = await readdir(this.#basePath, { withFileTypes: true });
+    const jsonFiles = files
+      .filter((file) => file.isFile() && file.name.endsWith(".json"))
+      .map((file) => file.name);
 
-    const queryMutex = new AsyncMutex();
+    const results: Document<Collections, K>[] = [];
+    for (let i = 0; i < jsonFiles.length; i += 100) {
+      const batch = jsonFiles.slice(i, i + 100);
+      const batchDocs = (await Promise.all(
+        batch.map((name) => this.read(name.replace(".json", "")))
+      )) as Document<Collections, K>[];
 
-    try {
-      await queryMutex.lock();
-
-      const files = await readdir(this.#basePath, { withFileTypes: true });
-      const jsonFiles = files
-        .filter(
-          (file) =>
-            file.isFile() &&
-            file.name.endsWith(".json") &&
-            !file.name.startsWith("_")
-        )
-        .map((file) => file.name);
-
-      const results: Document<Collections, K>[] = [];
-
-      if (concurrent) {
-        const processFileBatch = async (batch: string[]) => {
-          const batchResults = await Promise.all(
-            batch.map(async (filename) => {
-              try {
-                const filePath = path.join(this.#basePath, filename);
-                const documentData = await Promise.race([
-                  readFile(filePath, "utf-8"),
-                  new Promise<void>((_, reject) =>
-                    setTimeout(
-                      () => reject(new Error("Read operation timeout")),
-                      timeout
-                    )
-                  ),
-                ]);
-
-                const doc = JSON.parse(documentData as string) as Document<Collections, K>;
-                return filter(doc) ? doc : null;
-              } catch (error) {
-                console.error(`Error processing file ${filename}:`, error);
-                return null;
-              }
-            })
-          );
-
-          return batchResults.filter(Boolean) as Document<Collections, K>[];
-        };
-
-        for (let i = 0; i < jsonFiles.length; i += batchSize) {
-          const batch = jsonFiles.slice(i, i + batchSize);
-          const batchResults = await processFileBatch(batch);
-          results.push(...batchResults);
-        }
-      } else {
-        // Sequencial processing for no concurrency scenario
-        for (const fileName of jsonFiles) {
-          try {
-            const documentPath = path.join(this.#basePath, fileName);
-            const documentData = await readFile(documentPath, "utf-8");
-            const doc = JSON.parse(documentData) as Document<Collections, K>;
-
-            if (filter(doc)) {
-              results.push(doc);
-            }
-          } catch (error) {
-            console.error(`Error processing file ${fileName}:`, error);
-          }
-        }
-      }
-
-      return results;
-    } catch (error) {
-      console.error("Query operation failed", {
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      });
-
-      throw new QueryOperationError("Failed to execute query", error);
-    } finally {
-      queryMutex.unlock();
+      results.push(...batchDocs.filter((d) => d && filter(d)));
     }
+
+    return results;
   }
 }
