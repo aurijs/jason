@@ -3,12 +3,12 @@ import { access, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import Collection from "../data/collection.js";
 import type {
-	CollectionDocument,
 	CollectionOptions,
 	Document,
 	Plugin,
 	PluginLifecycle
 } from "../types/index.js";
+
 
 export default class JasonDB<T> {
 	private basePath: string;
