@@ -1,4 +1,4 @@
-import { rename, unlink, writeFile } from "node:fs/promises";
+import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 interface FileState {
@@ -11,8 +11,12 @@ interface FileState {
 
 const TEMP_PREFIX = `.tmp_${process.pid}_`;
 
+function randomString() {
+  return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
 function getTempPath(path: string) {
-  return join(path, `${TEMP_PREFIX}_${crypto.randomUUID()}`);
+  return join(path, `${TEMP_PREFIX}_${randomString()}`);
 }
 
 function getFilePath(basePath: string, fileName: string) {
@@ -21,14 +25,19 @@ function getFilePath(basePath: string, fileName: string) {
 
 async function retryAsyncOperation<T>(
   operation: () => Promise<T>,
-  maxRetries = 3,
+  maxRetries = 10,
   baseDelay = 10
-): Promise<T> {
-  return operation().catch(async (error: Error) => {
-    if (maxRetries <= 0) throw error;
-    await new Promise((r) => setTimeout(r, baseDelay));
-    return retryAsyncOperation(operation, maxRetries - 1, baseDelay * 2);
-  });
+) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
+    }
+  }
+
+  throw new Error("Unreachable");
 }
 
 export default class Writer {
@@ -49,7 +58,8 @@ export default class Writer {
   }
 
   async #write(filename: string, data: string) {
-    const state = this.#queue.get(filename)!;
+    const queue = this.#queue;
+    const state = queue.get(filename)!;
     state.locked = true;
 
     const filePath = getFilePath(this.#basePath, filename);
@@ -64,7 +74,6 @@ export default class Writer {
       throw error;
     } finally {
       state.locked = false;
-      await unlink(tempPath).catch(() => {});
       if (state.nextData !== null) {
         const nextData = state.nextData;
         state.nextData = null;
@@ -78,7 +87,6 @@ export default class Writer {
     }
   }
 
-  
   /**
    * Writes data to a file.
    *
