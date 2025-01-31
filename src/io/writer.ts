@@ -78,15 +78,16 @@ export default class Writer {
     }
   }
 
+  
   /**
    * Writes data to a file.
    *
-   * If the file is currently being written to, it will buffer the data and write it when the file is available.
-   * If the file is not currently being written to, it will write the data immediately.
+   * If the file is already being written, the data is queued until the previous
+   * write operation is complete.
    *
-   * @param filename - The name of the file to write to.
-   * @param data - The data to be written.
-   * @returns A promise that resolves when the data has been written.
+   * @param fileName The name of the file to write to
+   * @param data The data to write to the file
+   * @returns A promise that resolves to true when the write operation is complete
    */
   async write(fileName: string, data: string) {
     if (!this.#queue.has(fileName)) {
