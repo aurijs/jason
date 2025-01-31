@@ -26,7 +26,6 @@ import { Mutex } from "async-mutex";
 export default class Collection<Collections, K extends keyof Collections> {
   #basePath: string;
   #schema: ValidationFunction<Document<Collections, K>>;
-  #concurrencyStrategy: ConcurrencyStrategy;
   #metadata: Metadata | null;
   #cache: Cache<Document<Collections, K>>;
   #writer: Writer;
@@ -48,7 +47,6 @@ export default class Collection<Collections, K extends keyof Collections> {
   ) {
     this.#basePath = path.join(basePath, name as string);
     this.#schema = options.schema || (() => true);
-    this.#concurrencyStrategy = options.concurrencyStrategy || "optimistic";
 
     this.#metadata = options.generateMetadata
       ? new Metadata(this.#basePath)
@@ -70,21 +68,31 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @returns A promise that resolves when the collection exists.
    */
   private async ensureCollectionExists(): Promise<void> {
-    try {
-      await access(this.#basePath);
-      return;
-    } catch {
+    const maxRetries = 3;
+    const baseDelay = 10;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await mkdir(this.#basePath, { recursive: true });
-        await this.#metadata?.saveMetadata();
-      } catch (error) {
-        console.error("Failed to create collection directory", {
-          path: this.#basePath,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-        throw new Error(
-          `Failed to create collection directory: ${this.#basePath}`
-        );
+        await access(this.#basePath);
+        return;
+      } catch {
+        try {
+          await mkdir(this.#basePath, { recursive: true });
+          return;
+        } catch (error) {
+          if (attempt === maxRetries) {
+            console.error("Failed to create collection directory", {
+              path: this.#basePath,
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
+            throw new Error(
+              `Failed to create collection directory: ${this.#basePath}`
+            );
+          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, baseDelay * attempt)
+          );
+        }
       }
     }
   }
@@ -155,10 +163,8 @@ export default class Collection<Collections, K extends keyof Collections> {
   async create(data: Omit<Document<Collections, K>, "id">) {
     try {
       // Parallel promise execution
-      await Promise.all([
-        this.ensureCollectionExists(),
-        this.#metadata?.loadMetadata(),
-      ]);
+      await this.ensureCollectionExists();
+      await this.#metadata?.load();
 
       const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
       const document = { ...data, id } as Document<Collections, K>;
@@ -167,20 +173,17 @@ export default class Collection<Collections, K extends keyof Collections> {
         throw new Error("Document failed schema validation");
       }
 
-      const documentCount = (this.#metadata?.documentCount ?? 0) + 1;
-
       await Promise.all([
         this.#writer.write(id, stringify(document)),
-        this.#metadata?.saveMetadata({
-          documentCount,
-          lastModified: Date.now(),
-        }),
+        this.#metadata?.incrementDocumentCount(),
       ]);
 
       this.#cache.update(id, document);
 
       return document;
     } catch (error) {
+      console.log(error);
+
       if ((error as Error).message === "Document failed schema validation") {
         throw error;
       }
@@ -207,8 +210,6 @@ export default class Collection<Collections, K extends keyof Collections> {
       const documentPath = this.getDocumentPath(id);
       const data = await readFile(documentPath, "utf-8");
       const document = parse(data) as Document<Collections, K>;
-
-      document._lastModified = Date.now();
 
       this.#cache.update(id, document);
       return document;
@@ -280,62 +281,13 @@ export default class Collection<Collections, K extends keyof Collections> {
     id: string,
     data: Partial<Omit<Document<Collections, K>, "id">>
   ) {
-    if (this.#concurrencyStrategy === "optimistic") {
-      const lockId = await this.acquireLock(id);
-      if (!lockId) {
-        throw new Error("Failed to acquire lock");
-      }
-
-      try {
-        const result = await this.#_update(id, data);
-        await this.releaseLock(id, lockId);
-        return result;
-      } catch (error) {
-        await this.releaseLock(id, lockId);
-        throw error;
-      }
-    } else {
-      return this.#_update(id, data);
-    }
-  }
-
-  /**
-   * Updates a document with the given id and data.
-   *
-   * If the document does not exist, it will return null.
-   *
-   * If the concurrency strategy is "optimistic", it will throw an error if the document has been modified since the last read.
-   *
-   * @param id - The id of the document to update.
-   * @param data - The partial document to merge with the existing document.
-   * @returns A promise that resolves to the updated document or null if it does not exist.
-   * @throws An error if the document failed schema validation or if the version number has changed.
-   */
-  async #_update(
-    id: string,
-    data: Partial<Omit<Document<Collections, K>, "id">>
-  ) {
     const current = await this.read(id);
     if (!current) return null;
-    if (
-      this.#concurrencyStrategy === "versioning" &&
-      data._version !== undefined &&
-      data._version !== current._version
-    ) {
-      throw new Error(
-        "Version mismatch. The document was modified by another process"
-      );
-    }
 
     const updated = {
       ...current,
       ...data,
       id: current.id,
-      _version:
-        this.#concurrencyStrategy === "versioning"
-          ? (current._version || 0) + 1
-          : undefined,
-      _lastModified: Date.now(),
     } as Document<Collections, K>;
 
     if (!this.#schema(updated)) {
@@ -343,7 +295,7 @@ export default class Collection<Collections, K extends keyof Collections> {
     }
 
     await this.#writer.write(id, stringify(updated));
-    await this.#metadata?.saveMetadata();
+    await this.#metadata?.updateLastModified();
     this.#cache.update(id, updated);
     return updated;
   }
@@ -379,13 +331,8 @@ export default class Collection<Collections, K extends keyof Collections> {
         ),
       ]);
 
-      const updatedMetadata: Partial<CollectionMetadata> = {
-        documentCount: (this.#metadata?.documentCount || 0) - 1,
-        lastModified: Date.now(),
-      };
-
       await Promise.all([
-        this.#metadata?.saveMetadata(updatedMetadata),
+        this.#metadata?.decrementDocumentCount(),
         this.#cache.delete(id),
       ]);
 
