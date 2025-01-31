@@ -92,7 +92,7 @@ describe("Collection - CREATE", () => {
     await users.create({ name: "Jane", email: "j@j.com", age: 25 });
 
     const metadataPath = path.join(filePath, "users", "_metadata.json");
-    const metadata = JSON.parse(await readFile(metadataPath, "utf-8"));
+    const metadata = parse(await readFile(metadataPath, "utf-8"));
     expect(metadata.documentCount).toBe(2);
   });
 

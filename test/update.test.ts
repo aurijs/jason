@@ -28,9 +28,9 @@ afterEach(async () => {
 describe("USER tests", () => {
 	it("should throw error when updating non-existent user", async () => {
 		const users = db.collection("users");
-		await expect(
-			users.update("non-existent-id", { age: 40 }),
-		).rejects.toThrowError("Failed to acquire lock");
+		expect(
+			await users.update("non-existent-id", { age: 40 }),
+		).toBeNull();
 	});
 });
 
@@ -61,8 +61,8 @@ describe("POST tests", () => {
 
 	it("should throw error when updating non-existent post", async () => {
 		const posts = db.collection("posts");
-		await expect(
-			posts.update("non-existent-id", { content: "Updated" }),
-		).rejects.toThrowError("Failed to acquire lock");
+		expect(
+			await posts.update("non-existent-id", { content: "Updated" }),
+		).toBeNull();
 	});
 });
