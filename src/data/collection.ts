@@ -167,15 +167,14 @@ export default class Collection<Collections, K extends keyof Collections> {
         throw new Error("Document failed schema validation");
       }
 
-      const documentMetadata = {
-        ...this.#metadata,
-        documentCount: (this.#metadata?.documentCount || 0) + 1,
-        lastModified: Date.now(),
-      };
+      const documentCount = (this.#metadata?.documentCount ?? 0) + 1;
 
       await Promise.all([
         this.#writer.write(id, stringify(document)),
-        this.#metadata?.saveMetadata(documentMetadata),
+        this.#metadata?.saveMetadata({
+          documentCount,
+          lastModified: Date.now(),
+        }),
       ]);
 
       this.#cache.update(id, document);
