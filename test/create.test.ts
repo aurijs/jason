@@ -87,7 +87,6 @@ describe("Collection - CREATE", () => {
 
   it("should increment metadata documentCount (if enabled)", async () => {
     const users = db.collection("users", { generateMetadata: true });
-	console.dir(users);
 	
     await users.create({ name: "John", email: "j@j.com", age: 30 });
     await users.create({ name: "Jane", email: "j@j.com", age: 25 });
@@ -124,8 +123,10 @@ describe("Collection - CREATE", () => {
   });
 
   it("should handle 1000 concurrent writes", async () => {
+
     const posts = db.collection("posts");
     const count = 1000;
+    const start = performance.now();
     const promises = Array.from(
       { length: count },
       (_, i) =>
@@ -137,6 +138,8 @@ describe("Collection - CREATE", () => {
     );
 
     const results = await Promise.all(promises);
+    const end = performance.now();
+    console.log(`Create ${count} documents in ${(end - start).toFixed(2)}ms`);
     expect(results).toHaveLength(count);
     expect(new Set(results.map((d) => d.id))).toHaveLength(count); // IDs únicos
   });
