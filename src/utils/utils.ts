@@ -22,7 +22,7 @@ export async function retryAsyncOperation(
       return await fn();
     } catch (error) {
       const delay =
-        baseDelay * Math.pow(2, attempt) * (1 + Math.random() * 0.1);
+        baseDelay * (2 ** attempt) * (1 + Math.random() * 0.1);
       await new Promise((resolve) => setImmediate(resolve, delay));
       attempt++;
     }

@@ -1,43 +1,28 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { rm } from "node:fs/promises";
+import { constants, access, rm } from "node:fs/promises";
 import path from "node:path";
-import JasonDB from "../src/core";
-import type { BaseDocument } from "../src/type";
-
-interface TestUser extends BaseDocument {
-	id: string;
-	name: string;
-	email: string;
-	age: number;
-}
-
-interface TestPost extends BaseDocument {
-	id: string;
-	title: string;
-	content: string;
-	authorId: string;
-}
-
-interface TestCollections {
-	users: TestUser[];
-	posts: TestPost[];
-}
-
-const testFilename = "test_collection_db";
-const filePath = path.join(process.cwd(), `${testFilename}`);
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import JasonDB from "../src/core/main";
+import type { TestCollections, TestUser } from "./types";
 
 describe("Collection tests", () => {
+	let testFilename: string;
+	let filePath: string;
 	let db: JasonDB<TestCollections>;
 
 	beforeEach(() => {
+		testFilename = "test_collection_db";
+		filePath = path.join(process.cwd(), testFilename);
 		db = new JasonDB(testFilename);
 	});
 
 	afterEach(async () => {
 		try {
-			await rm(filePath, { recursive: true });
+			await rm(filePath, { recursive: true, force: true });
 		} catch (error) {
-			console.error("Error cleaning up test directory:", error);
+			if (error.code !== "ENOENT") {
+				console.error("Error cleaning up test directory:", error);
+				throw error;
+			}
 		}
 	});
 
@@ -58,7 +43,7 @@ describe("Collection tests", () => {
 		});
 
 		const userData = {
-			id: '1',
+			id: "1",
 			name: "Cache Test",
 			email: "cache@example.com",
 			age: 30,
@@ -71,20 +56,20 @@ describe("Collection tests", () => {
 		expect(firstRead).toEqual(secondRead);
 	});
 
-	it.concurrent("should respect schema validation", async () => {
+	it("should respect schema validation", async () => {
 		const users = db.collection("users", {
 			schema: (user: TestUser) => user.age >= 18,
 		});
 
 		const validUser = {
-			id: '1',
+			id: "1",
 			name: "Adult User",
 			email: "adult@example.com",
 			age: 25,
 		};
 
 		const invalidUser = {
-			id: '2',
+			id: "2",
 			name: "Minor User",
 			email: "minor@example.com",
 			age: 15,
@@ -99,23 +84,25 @@ describe("Collection tests", () => {
 		);
 	});
 
-	it.skip("should handle versioning strategy", async () => {
-		const users = db.collection("users", {
-			concurrencyStrategy: "versioning",
-		});
-
-		const userData = {
-			id: '1',
-			name: "Version Test",
-			email: "version@example.com",
+	it("should read all documents in a collection", async () => {
+		const users = db.collection("users");
+		const userData1 = {
+			id: "1",
+			name: "User 1",
+			email: "user1@example.com",
 			age: 30,
 		};
-
-		const created = await users.create(userData);
-		expect(created._version).toBe(1);
-
-		const updated = await users.update(created.id, { age: 31 });
-		expect(updated?._version).toBe(2);
+		const userData2 = {
+			id: "2",
+			name: "User 2",
+			email: "user2@example.com",
+			age: 25,
+		};
+		await users.create(userData1);
+		await users.create(userData2);
+		console.time("readAll");
+		const allUsers = await users.readAll();
+		console.timeEnd("readAll");
+		expect(allUsers.length).toBe(2);
 	});
-
 });

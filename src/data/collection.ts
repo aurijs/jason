@@ -1,3 +1,4 @@
+import { parse, stringify } from "devalue";
 import crypto from "node:crypto";
 import {
   access,
@@ -8,30 +9,25 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import Cache from "./cache.js";
-import {
-  DeleteOperationError,
-  DocumentNotFoundError,
-  QueryOperationError,
-} from "../core/errors.js";
-import Metadata from "./metadata.js";
-import AsyncMutex from "../utils/mutex.js";
+import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
+import Writer from "../io/writer.js";
 import type {
-  BaseDocument,
   CollectionMetadata,
   CollectionOptions,
   ConcurrencyStrategy,
+  Document,
   ValidationFunction,
-} from "../types/type.js";
-import Writer from "../io/writer.js";
+} from "../types/index.js";
+// import AsyncMutex from "../utils/mutex.js";
+import Cache from "./cache.js";
+import Metadata from "./metadata.js";
+import { Mutex } from "async-mutex";
 
-export default class Collection<T extends BaseDocument = BaseDocument> {
-  private basePath: string;
-  private schema: ValidationFunction<T>;
-  private concurrencyStrategy: ConcurrencyStrategy;
-  private metadata: Metadata | null;
-  private cache: Cache<T>;
-
+export default class Collection<Collections, K extends keyof Collections> {
+  #basePath: string;
+  #schema: ValidationFunction<Document<Collections, K>>;
+  #metadata: Metadata | null;
+  #cache: Cache<Document<Collections, K>>;
   #writer: Writer;
 
   /**
@@ -46,20 +42,19 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    */
   constructor(
     basePath: string,
-    name: string,
-    options: CollectionOptions<T> = {}
+    name: K,
+    options: CollectionOptions<Document<Collections, K>> = {}
   ) {
-    this.basePath = path.join(basePath, name);
-    this.schema = options.schema || (() => true);
-    this.concurrencyStrategy = options.concurrencyStrategy || "optimistic";
+    this.#basePath = path.join(basePath, name as string);
+    this.#schema = options.schema || (() => true);
 
-    this.metadata = options.generateMetadata
-      ? new Metadata(this.basePath)
+    this.#metadata = options.generateMetadata
+      ? new Metadata(this.#basePath)
       : null;
 
-    this.#writer = new Writer(this.basePath);
+    this.#writer = new Writer(this.#basePath);
 
-    this.cache = new Cache<T>(options.cacheTimeout);
+    this.#cache = new Cache<Document<Collections, K>>(options.cacheTimeout);
 
     this.ensureCollectionExists();
   }
@@ -73,21 +68,31 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @returns A promise that resolves when the collection exists.
    */
   private async ensureCollectionExists(): Promise<void> {
-    try {
-      await access(this.basePath);
-      return;
-    } catch {
+    const maxRetries = 3;
+    const baseDelay = 10;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await mkdir(this.basePath, { recursive: true });
-        await this.metadata?.saveMetadata();
-      } catch (error) {
-        console.error("Failed to create collection directory", {
-          path: this.basePath,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-        throw new Error(
-          `Failed to create collection directory: ${this.basePath}`
-        );
+        await access(this.#basePath);
+        return;
+      } catch {
+        try {
+          await mkdir(this.#basePath, { recursive: true });
+          return;
+        } catch (error) {
+          if (attempt === maxRetries) {
+            console.error("Failed to create collection directory", {
+              path: this.#basePath,
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
+            throw new Error(
+              `Failed to create collection directory: ${this.#basePath}`
+            );
+          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, baseDelay * attempt)
+          );
+        }
       }
     }
   }
@@ -99,7 +104,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @returns The path to the document.
    */
   private getDocumentPath(id: string): string {
-    return path.join(this.basePath, `${id}.json`);
+    return path.join(this.#basePath, `${id}.json`);
   }
 
   /**
@@ -140,7 +145,7 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
       if (savedLockId === lockId) {
         await unlink(lockPath);
       }
-    } catch { }
+    } catch {}
   }
 
   /**
@@ -155,34 +160,35 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @returns A promise that resolves to the created document.
    * @throws An error if the document failed schema validation or if the collection did not exist.
    */
-  async create(data: T): Promise<T> {
-    // Parallel promise execution
-    await Promise.all([
-      this.ensureCollectionExists(),
-      this.metadata?.loadMetadata(),
-    ]);
+  async create(data: Omit<Document<Collections, K>, "id">) {
+    try {
+      // Parallel promise execution
+      await this.ensureCollectionExists();
+      await this.#metadata?.load();
 
-    const id = data.id ?? crypto.randomUUID(); // Substituição por crypto.randomUUID() mais performática
-    const document = { ...data, id } as T;
+      const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
+      const document = { ...data, id } as Document<Collections, K>;
 
-    if (!this.schema(document)) {
-      throw new Error("Document failed schema validation");
+      if (!this.#schema(document)) {
+        throw new Error("Document failed schema validation");
+      }
+
+      await Promise.all([
+        this.#writer.write(id, stringify(document)),
+        this.#metadata?.incrementDocumentCount(),
+      ]);
+
+      this.#cache.update(id, document);
+
+      return document;
+    } catch (error) {
+      console.log(error);
+
+      if ((error as Error).message === "Document failed schema validation") {
+        throw error;
+      }
+      throw new Error("Failed to create document");
     }
-
-    const documentMetadata = {
-      ...this.metadata,
-      documentCount: (this.metadata?.documentCount || 0) + 1,
-      lastModified: Date.now(),
-    };
-
-    await Promise.all([
-      this.#writer.write(id, JSON.stringify(document)),
-      this.metadata?.saveMetadata(documentMetadata),
-    ]);
-
-    this.cache.update(id, document);
-
-    return document;
   }
 
   /**
@@ -196,21 +202,16 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @param id - The id of the document to read.
    * @returns The document, or null if it does not exist.
    */
-  async read(id: string): Promise<T | null> {
-    const cached = this.cache.get(id);
-    if (
-      cached?._lastModified &&
-      Date.now() - cached._lastModified < this.cache.timeout
-    ) {
-      return cached;
-    }
+  async read(id: string) {
+    const cached = this.#cache.get(id);
+    if (cached) return cached;
 
     try {
       const documentPath = this.getDocumentPath(id);
       const data = await readFile(documentPath, "utf-8");
-      const document = JSON.parse(data) as T;
+      const document = parse(data) as Document<Collections, K>;
 
-      this.cache.update(id, document);
+      this.#cache.update(id, document);
       return document;
     } catch {
       return null;
@@ -227,35 +228,21 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @param options.limit - The maximum number of documents to return.
    * @returns A promise that resolves to an array of documents.
    */
-  async readAll(options?: { skip?: number; limit?: number }): Promise<T[]> {
-    await this.ensureCollectionExists();
+  async readAll(options?: { skip?: number; limit?: number }) {
+    const files = await readdir(this.#basePath, { withFileTypes: true });
+    const batchSize = 100;
 
-    const files = await readdir(this.basePath);
-
-    const documentFiles = files.filter(
-      (file) => file.endsWith(".json") && !file.startsWith("_")
-    );
-
-    let results: T[] = [];
-
-    await Promise.all(
-      documentFiles.map(async (file) => {
-        const id = file.replace(".json", "");
-        const doc = await this.read(id);
-        if (doc !== null) {
-          results.push(doc);
-        }
-      })
-    );
-
-    if (options?.skip) {
-      results = results.slice(options.skip);
+    let result: Document<Collections, K>[] = [];
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map((file) => this.read(file.name.replace(".json", "")))
+      );
+      result = result.concat(
+        batchResults.filter(Boolean) as Document<Collections, K>[]
+      );
     }
-    if (options?.limit) {
-      results = results.slice(0, options.limit);
-    }
-
-    return results;
+    return result;
   }
 
   /**
@@ -290,73 +277,26 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @throws An error if the lock cannot be acquired or if the update operation
    * encounters an error.
    */
-  async update(id: string, data: Partial<Omit<T, "id">>): Promise<T | null> {
-    if (this.concurrencyStrategy === "optimistic") {
-      const lockId = await this.acquireLock(id);
-      if (!lockId) {
-        throw new Error("Failed to acquire lock");
-      }
-
-      try {
-        const result = await this._update(id, data);
-        await this.releaseLock(id, lockId);
-        return result;
-      } catch (error) {
-        await this.releaseLock(id, lockId);
-        throw error;
-      }
-    } else {
-      return this._update(id, data);
-    }
-  }
-
-  /**
-   * Updates a document with the given id and data.
-   *
-   * If the document does not exist, it will return null.
-   *
-   * If the concurrency strategy is "optimistic", it will throw an error if the document has been modified since the last read.
-   *
-   * @param id - The id of the document to update.
-   * @param data - The partial document to merge with the existing document.
-   * @returns A promise that resolves to the updated document or null if it does not exist.
-   * @throws An error if the document failed schema validation or if the version number has changed.
-   */
-  private async _update(
+  async update(
     id: string,
-    data: Partial<Omit<T, "id">>
-  ): Promise<T | null> {
+    data: Partial<Omit<Document<Collections, K>, "id">>
+  ) {
     const current = await this.read(id);
     if (!current) return null;
-    if (
-      this.concurrencyStrategy === "versioning" &&
-      data._version !== undefined &&
-      data._version !== current._version
-    ) {
-      throw new Error(
-        "Version mismatch. The document was modified by another process"
-      );
-    }
 
     const updated = {
       ...current,
       ...data,
       id: current.id,
-      _version:
-        this.concurrencyStrategy === "versioning"
-          ? (current._version || 0) + 1
-          : undefined,
-      _lastModified: Date.now(),
-    } as T;
+    } as Document<Collections, K>;
 
-    if (!this.schema(updated)) {
+    if (!this.#schema(updated)) {
       throw new Error("Document failed schema validation");
     }
 
-    const documentPath = this.getDocumentPath(id);
-    await writeFile(documentPath, JSON.stringify(updated, null, 2));
-    await this.metadata?.saveMetadata();
-    this.cache.update(id, updated);
+    await this.#writer.write(id, stringify(updated));
+    await this.#metadata?.updateLastModified();
+    this.#cache.update(id, updated);
     return updated;
   }
 
@@ -366,18 +306,18 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
    * @param id - The id of the document to be deleted.
    * @returns A promise that resolves to true if the document was successfully deleted, or false if the deletion failed.
    */
-  async delete(id: string): Promise<boolean> {
-    const deleteMutex = new AsyncMutex();
+  async delete(id: string) {
+    const deleteMutex = new Mutex();
 
     try {
-      deleteMutex.lock();
+      await deleteMutex.acquire();
 
       const documentPath = this.getDocumentPath(id);
 
       // Operações concorrentes otimizadas
       const [documentExists] = await Promise.allSettled([
         access(documentPath),
-        this.cache.get(id), // Verifica se o documento existe na cache
+        this.#cache.get(id), // Verifica se o documento existe na cache
       ]);
 
       if (documentExists.status === "rejected") {
@@ -391,14 +331,9 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
         ),
       ]);
 
-      const updatedMetadata: Partial<CollectionMetadata> = {
-        documentCount: (this.metadata?.documentCount || 0) - 1,
-        lastModified: Date.now(),
-      };
-
       await Promise.all([
-        this.metadata?.saveMetadata(updatedMetadata),
-        this.cache.delete(id),
+        this.#metadata?.decrementDocumentCount(),
+        this.#cache.delete(id),
       ]);
 
       return true;
@@ -406,106 +341,45 @@ export default class Collection<T extends BaseDocument = BaseDocument> {
       // Erro customizado para melhor rastreabilidade
       throw new DeleteOperationError("Failed to delete document", error);
     } finally {
-      deleteMutex.unlock();
+      deleteMutex.release();
     }
   }
 
   /**
-   * Queries the collection for documents matching the given filter function.
+   * Executes a query on the collection.
    *
-   * @param filter - A function that takes a document as an argument and returns a boolean indicating whether the document matches the query.
-   * @returns A promise that resolves to an array of documents that matched the query.
+   * The query is executed using a custom filter function that takes a document
+   * as an argument and returns a boolean indicating whether the document should
+   * be included in the result set.
+   *
+   * @param filter - The filter function to apply to the documents in the collection.
+   * @param options - Optional parameters to control the query execution.
+   * @param options.concurrent - Whether to execute the query concurrently.
+   * @param options.batchSize - The number of documents to process in parallel.
+   * @returns A promise that resolves to an array of documents that match the filter.
    */
   async query(
-    filter: (doc: T) => boolean,
+    filter: (doc: Document<Collections, K>) => boolean,
     options: {
       concurrent?: boolean;
       batchSize?: number;
-      timeout?: number;
     } = {}
-  ): Promise<T[]> {
-    const {
-      concurrent = true,
-      batchSize = 50,
-      timeout = 5000, // 5 segundos timeout global
-    } = options;
+  ) {
+    const files = await readdir(this.#basePath, { withFileTypes: true });
+    const jsonFiles = files
+      .filter((file) => file.isFile() && file.name.endsWith(".json"))
+      .map((file) => file.name);
 
-    const queryMutex = new AsyncMutex();
+    const results: Document<Collections, K>[] = [];
+    for (let i = 0; i < jsonFiles.length; i += 100) {
+      const batch = jsonFiles.slice(i, i + 100);
+      const batchDocs = (await Promise.all(
+        batch.map((name) => this.read(name.replace(".json", "")))
+      )) as Document<Collections, K>[];
 
-    try {
-      await queryMutex.lock();
-
-      const files = await readdir(this.basePath, { withFileTypes: true });
-      const jsonFiles = files
-        .filter(
-          (file) =>
-            file.isFile() &&
-            file.name.endsWith(".json") &&
-            !file.name.startsWith("_")
-        )
-        .map((file) => file.name);
-
-      const results: T[] = [];
-
-      if (concurrent) {
-        const processFileBatch = async (batch: string[]) => {
-          const batchResults = await Promise.all(
-            batch.map(async (filename) => {
-              try {
-                const filePath = path.join(this.basePath, filename);
-                const documentData = await Promise.race([
-                  readFile(filePath, "utf-8"),
-                  new Promise<void>((_, reject) =>
-                    setTimeout(
-                      () => reject(new Error("Read operation timeout")),
-                      timeout
-                    )
-                  ),
-                ]);
-
-                const doc = JSON.parse(documentData as string) as T;
-                return filter(doc) ? doc : null;
-              } catch (error) {
-                console.error(`Error processing file ${filename}:`, error);
-                return null;
-              }
-            })
-          );
-
-          return batchResults.filter(Boolean) as T[];
-        };
-
-        for (let i = 0; i < jsonFiles.length; i += batchSize) {
-          const batch = jsonFiles.slice(i, i + batchSize);
-          const batchResults = await processFileBatch(batch);
-          results.push(...batchResults);
-        }
-      } else {
-        // Sequencial processing for no concurrency scenario
-        for (const fileName of jsonFiles) {
-          try {
-            const documentPath = path.join(this.basePath, fileName);
-            const documentData = await readFile(documentPath, "utf-8");
-            const doc = JSON.parse(documentData) as T;
-
-            if (filter(doc)) {
-              results.push(doc);
-            }
-          } catch (error) {
-            console.error(`Error processing file ${fileName}:`, error);
-          }
-        }
-      }
-
-      return results;
-    } catch (error) {
-      console.error("Query operation failed", {
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      });
-
-      throw new QueryOperationError("Failed to execute query", error);
-    } finally {
-      queryMutex.unlock();
+      results.push(...batchDocs.filter((d) => d && filter(d)));
     }
+
+    return results;
   }
 }

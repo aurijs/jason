@@ -1,20 +1,48 @@
-import type { PathLike } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { retryAsyncOperation } from "../utils/utils.js";
 
-type Resolve = () => void;
-type Reject = (error: Error) => void;
+interface FileState {
+  locked: boolean;
+  nextData: string | null;
+  nextPromise: Promise<void> | null;
+  nextResolve: (() => void) | null;
+  nextReject: ((error: Error) => void) | null;
+}
+
+const TEMP_PREFIX = `.tmp_${process.pid}_`;
+
+function randomString() {
+  return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
+function getTempPath(path: string) {
+  return join(path, `${TEMP_PREFIX}_${randomString()}`);
+}
+
+function getFilePath(basePath: string, fileName: string) {
+  return join(basePath, `${fileName}.json`);
+}
+
+async function retryAsyncOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries = 10,
+  baseDelay = 10
+) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
+    }
+  }
+
+  throw new Error("Unreachable");
+}
 
 export default class Writer {
   #basePath: string;
-  #locked = false;
-
-  #prev: [Resolve, Reject] | null = null;
-  #next: [Resolve, Reject] | null = null;
-  #nextPromise: Promise<void> | null = null;
-  #nextData: string | null = null;
+  #queue = new Map<string, FileState>();
 
   /**
    * Constructs a new Writer instance.
@@ -24,103 +52,37 @@ export default class Writer {
     this.#basePath = basePath;
   }
 
-  /**
-   * Generates a temporary filename from the given filename.
-   * The temporary filename is in the same directory as the given filename
-   * and has the same extension, but with a random UUID and timestamp
-   * inserted before the extension.
-   * @param filename The path to the file to write to.
-   * @returns A temporary filename.
-   */
-  #generateTemporaryFilename(filename: PathLike): string {
-    const path =
-      filename instanceof URL ? fileURLToPath(filename) : filename.toString();
-
-    const dir = this.#basePath;
-
-    // Use a random UUID to avoid race conditions
-    const randomPart = crypto.randomUUID();
-
-    return join(dir, `.${Date.now()}-${randomPart}.tmp`);
+  async #atomicWrite(tempPath: string, filePath: string, data: string) {
+    await writeFile(tempPath, data, "utf-8");
+    await retryAsyncOperation(() => rename(tempPath, filePath));
   }
 
-  /**
-   * Adds data to be written to the file.
-   *
-   * Stores the most recent data to be written and creates a promise
-   * that resolves when the data is successfully written. Subsequent
-   * calls to this method will replace the data to be written with the
-   * new data, and return a promise that resolves when the current data
-   * is written.
-   *
-   * @param data - The data to be written to the file.
-   * @returns A promise that resolves when the data has been written.
-   */
-  #add(data: string): Promise<true> {
-    // Only keep most recent data
-    this.#nextData = data;
+  async #write(filename: string, data: string) {
+    const queue = this.#queue;
+    const state = queue.get(filename)!;
+    state.locked = true;
 
-    // Create a singleton promise to resolve all next promises once next data is written
-    this.#nextPromise ||= new Promise((resolve, reject) => {
-      this.#next = [resolve, reject];
-    });
-
-    // Return a promise that will resolve at the same time as next promise
-    return new Promise((resolve, reject) => {
-      this.#nextPromise?.then(() => resolve(true)).catch(reject);
-    });
-  }
-
-  /**
-   * Writes data to the file.
-   *
-   * This method is atomic; it will overwrite the entire file with the
-   * provided data. If the write fails, the original file will be left
-   * intact.
-   *
-   * This method is also asynchronous and will not block other operations.
-   * You can call this method multiple times in a row; each call will
-   * queue up the data to be written and return a promise that resolves
-   * when the data has been written.
-   *
-   * @param data - The data to be written to the file.
-   * @returns A promise that resolves when the data has been written.
-   */
-  async #write(fileName: string, data: string): Promise<true> {
-    // Lock file
-    this.#locked = true;
-
-    const fullPath = join(this.#basePath, `${fileName}.json`);
-    const temporaryFilename = this.#generateTemporaryFilename(fileName);
+    const filePath = getFilePath(this.#basePath, filename);
+    const tempPath = getTempPath(this.#basePath);
 
     try {
-      // Atomic write
-      await writeFile(temporaryFilename, data, "utf-8");
-      await retryAsyncOperation(async () => {
-        await rename(temporaryFilename, fullPath);
-      }, 10);
-
-      // Call resolve
-      this.#prev?.[0]();
-
+      await this.#atomicWrite(tempPath, filePath, data);
+      state.nextResolve?.();
       return true;
-    } catch (err) {
-      // Call reject
-      if (err instanceof Error) {
-        this.#prev?.[1](err);
-      }
-      throw err;
+    } catch (error) {
+      state.nextReject?.(error as Error);
+      throw error;
     } finally {
-      // Unlock file
-      this.#locked = false;
-
-      this.#prev = this.#next;
-      this.#next = this.#nextPromise = null;
-
-      if (this.#nextData !== null) {
-        const nextData = this.#nextData;
-        this.#nextData = null;
-        await this.write(fileName, nextData);
+      state.locked = false;
+      if (state.nextData !== null) {
+        const nextData = state.nextData;
+        state.nextData = null;
+        await this.write(filename, nextData);
+      } else {
+        state.nextPromise = null;
+        state.nextResolve = null;
+        state.nextReject = null;
+        this.#queue.delete(filename);
       }
     }
   }
@@ -128,15 +90,45 @@ export default class Writer {
   /**
    * Writes data to a file.
    *
-   * If the file is currently being written to, it will buffer the data and write it when the file is available.
-   * If the file is not currently being written to, it will write the data immediately.
+   * If the file is already being written, the data is queued until the previous
+   * write operation is complete.
    *
-   * @param fileName - The name of the file to write to.
-   * @param data - The data to be written.
-   * @returns A promise that resolves when the data has been written.
+   * @param fileName The name of the file to write to
+   * @param data The data to write to the file
+   * @returns A promise that resolves to true when the write operation is complete
    */
-  write(fileName: string, data: string) {
-    if (this.#locked) return this.#add(data);
-    return this.#write(fileName, data);
+  async write(fileName: string, data: string) {
+    if (!this.#queue.has(fileName)) {
+      this.#queue.set(fileName, {
+        locked: false,
+        nextData: null,
+        nextPromise: null,
+        nextResolve: null,
+        nextReject: null,
+      });
+    }
+
+    const state = this.#queue.get(fileName)!;
+
+    if (!state.locked) {
+      return this.#write(fileName, data);
+    }
+
+    if (state.nextPromise) {
+      state.nextData = data;
+      return new Promise<boolean>((resolve, reject) => {
+        state.nextPromise?.then(() => resolve(true)).catch(reject);
+      });
+    }
+
+    state.nextData = data;
+    state.nextPromise = new Promise<void>((resolve, reject) => {
+      state.nextResolve = resolve;
+      state.nextReject = reject;
+    });
+
+    return new Promise<boolean>((resolve, reject) => {
+      state.nextPromise?.then(() => resolve(true)).catch(reject);
+    });
   }
 }

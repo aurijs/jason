@@ -1,84 +1,146 @@
-import { rm } from "node:fs/promises";
+import { parse, stringify } from "devalue";
+import { access, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import JasonDB from "../src/core";
-import type { TestCollections, TestPost } from "./types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import JasonDB from "../src/core/main";
+import type { TestCollections } from "./types";
 
-const testFilename = "test_create_db";
+const testFilename = `test_create_db`;
 const filePath = path.join(process.cwd(), `${testFilename}`);
 
 let db: JasonDB<TestCollections>;
 
 beforeEach(async () => {
-    db = new JasonDB(testFilename);
-})
+  db = new JasonDB(testFilename);
+});
 
 afterEach(async () => {
-    try {
-        await rm(filePath, { recursive: true });
-    } catch (error) {
-        console.error("Error cleaning up test directory:", error);
+  try {
+    await rm(filePath, { recursive: true, force: true });
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("Error cleaning up test directory:", error);
+      throw error;
     }
-});
-describe('CREATE USER tests', () => {
-
-    it('should create a user', async () => {
-        const users = db.collection("users");
-        const userData = {
-            id: "1",
-            name: "John",
-            email: "j@j.com",
-            age: 30,
-        };
-
-        const user = await users.create(userData);
-
-        expect(user).toBeDefined();
-        expect(user.id).toBeDefined();
-        expect(user.name).toBe(userData.name);
-        expect(user.email).toBe(userData.email);
-        expect(user.age).toBe(userData.age);
-    });
-
-    it("should throw error when creating user with invalid data", async () => {
-        const users = db.collection("users", {
-            schema: (user) => typeof user.name === "string" && typeof user.email === "string" && typeof user.age === "number",
-        });
-        await expect(
-            users.create({ name: 123, email: "invalid", age: "30" } as any),
-        ).rejects.toThrow('Document failed schema validation');
-    });
+  }
 });
 
-describe('CREATE POST collection', () => {
-    it("should create a new post", async () => {
-        const posts = db.collection("posts");
-        const postData = {
-            id: "1",
-            title: "Test Post",
-            content: "This is a test post content",
-            authorId: "test-author-id",
-        };
-
-        const post = await posts.create(postData);
-
-        expect(post).toBeDefined();
-        expect(post.id).toBeDefined();
-        expect(post.title).toBe(postData.title);
-        expect(post.content).toBe(postData.content);
-        expect(post.authorId).toBe(postData.authorId);
+describe("Collection - CREATE", () => {
+  it("should generate ID if not provided", async () => {
+    const users = db.collection("users");
+    const user = await users.create({
+      name: "John",
+      email: "j@j.com",
+      age: 30,
     });
 
-    it("should throw error when creating post with invalid data", async () => {
-        const posts = db.collection("posts", {
-            schema: (post: TestPost) => typeof post.title === "string" && typeof post.content === "string" && typeof post.authorId === "string",
-        });
-        await expect(
-            posts.create({
-                title: 123,
-                content: 456,
-                authorId: true,
-            } as any),
-        ).rejects.toThrow();
+    expect(user.id).toBeDefined();
+    expect(user.id).toMatch(/^[\da-f-]{36}$/); // UUID format
+  });
+
+  it("should create document with custom ID", async () => {
+    const users = db.collection("users");
+    const user = await users.create({
+      id: "custom-id",
+      name: "John",
+      email: "j@j.com",
+      age: 30,
     });
-})
+
+    expect(user.id).toBe("custom-id");
+  });
+
+  it("should persist document to filesystem", async () => {
+    const posts = db.collection("posts");
+    const post = await posts.create({
+      title: "Post",
+      content: "Content",
+      authorId: "author",
+    });
+
+    const docPath = path.join(filePath, "posts", `${post.id}.json`);
+    await expect(access(docPath)).resolves.toBeUndefined();
+
+    const rawData = await readFile(docPath, "utf-8");
+    const data = parse(rawData);
+
+    console.dir(rawData);
+
+    expect(data).toEqual(post);
+  });
+
+  it("should update cache after creation", async () => {
+    const posts = db.collection("posts", { cacheTimeout: 1000 });
+    const post = await posts.create({
+      title: "Cached Post",
+      content: "Content",
+      authorId: "author",
+    });
+
+    // Alterar o arquivo no disco para verificar se o cache é retornado
+    const docPath = path.join(filePath, "posts", `${post.id}.json`);
+    await writeFile(docPath, stringify({ ...post, title: "Modified" }));
+
+    const cachedPost = await posts.read(post.id);
+    expect(cachedPost?.title).toBe("Cached Post");
+  });
+
+  it("should increment metadata documentCount (if enabled)", async () => {
+    const users = db.collection("users", { generateMetadata: true });
+	
+    await users.create({ name: "John", email: "j@j.com", age: 30 });
+    await users.create({ name: "Jane", email: "j@j.com", age: 25 });
+
+    const metadataPath = path.join(filePath, "users", "_metadata.json");
+    const metadata = parse(await readFile(metadataPath, "utf-8"));
+    expect(metadata.documentCount).toBe(2);
+  });
+
+  it("should throw schema validation error", async () => {
+    const users = db.collection("users", {
+      schema: (doc) => doc.age > 18,
+    });
+
+    await expect(
+      users.create({ name: "Teen", email: "t@t.com", age: 16 })
+    ).rejects.toThrow("Document failed schema validation");
+  });
+
+  it("should handle directory creation errors", async () => {
+    const mockError = new Error("Permission denied");
+    vi.spyOn(await import("node:fs/promises"), "mkdir").mockRejectedValue(
+      mockError
+    );
+
+    const db = new JasonDB("/invalid/path");
+    // @ts-expect-error testing create method
+    const users = db.collection("users");
+
+    await expect(
+      //@ts-expect-error testing create method
+      users.create({ name: "John", email: "j@j.com", age: 30 })
+    ).rejects.toThrow("Failed to create document");
+  });
+
+  it("should handle 1000 concurrent writes", async () => {
+
+    const posts = db.collection("posts");
+    const count = 1000;
+    const start = performance.now();
+    const promises = Array.from(
+      { length: count },
+      (_, i) =>
+        posts.create({
+          title: `Post ${i}`,
+          content: "Content",
+          authorId: "author",
+        } as any) // Forçando tipo para simplificar
+    );
+
+    const results = await Promise.all(promises);
+    const end = performance.now();
+    console.log(`Create ${count} documents in ${(end - start).toFixed(2)}ms`);
+    expect(results).toHaveLength(count);
+    expect(new Set(results.map((d) => d.id))).toHaveLength(count); // IDs únicos
+  });
+});

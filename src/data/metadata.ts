@@ -1,21 +1,93 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { parse, stringify } from "devalue";
+import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import AsyncMutex from "../utils/mutex.js";
-import type { CollectionMetadata } from "../types/type.js";
 import { MetadataPersistenceError } from "../core/errors.js";
+import Writer from "../io/writer.js";
+import type { CollectionMetadata } from "../types/index.js";
+
+const MAX_METADATA_SIZE = 1024 * 10;
+const METADATA_PARSE_TIMEOUT = 500;
+
 export default class Metadata {
   #metadataPath: string;
-  #metadata!: CollectionMetadata;
+  #metadata: CollectionMetadata;
+  #writer: Writer;
 
   constructor(path: string) {
     this.#metadataPath = join(path, "_metadata.json");
-
-    this.#initializeMetadata(path);
+    this.#writer = new Writer(path);
+    this.#metadata = this.#initializeMetadata(path);
   }
 
   get documentCount(): number {
     return this.#metadata.documentCount;
   }
+
+  get indexes(): string[] {
+    return this.#metadata.indexes;
+  }
+
+  async incrementDocumentCount(amount = 1) {
+    this.#metadata.documentCount += amount;
+    await this.#persist({ documentCount: this.#metadata.documentCount });
+  }
+
+  async decrementDocumentCount(amount = 1) {
+    this.#metadata.documentCount -= amount;
+    await this.#persist({ documentCount: this.#metadata.documentCount });
+  }
+
+  async addIndex(indexName: string) {
+    if (!this.#metadata.indexes.includes(indexName)) {
+      this.#metadata.indexes.push(indexName);
+      await this.#persist({ indexes: this.#metadata.indexes });
+    }
+  }
+
+  async updateLastModified(): Promise<void> {
+    await this.#persist({ lastModified: Date.now() });
+  }
+
+  async #validateMetadata(data: unknown) {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid metadata structure");
+    }
+
+    const metadata = data as CollectionMetadata;
+
+    if (
+      typeof metadata.documentCount !== "number" ||
+      metadata.documentCount < 0
+    ) {
+      throw new Error("Invalid document count");
+    }
+
+    if (!Array.isArray(metadata.indexes)) {
+      throw new Error("Invalid indexes format");
+    }
+
+    return metadata;
+  }
+
+  async #persist(update: Partial<CollectionMetadata>) {
+    try {
+      const newMetadata = {
+        ...this.#metadata,
+        ...update,
+        lastModified: Date.now(),
+      } satisfies Partial<CollectionMetadata>;
+
+      await this.#writer.write('_metadata', stringify(newMetadata));
+    } catch (error) {
+      throw new MetadataPersistenceError(
+        `Failed to save metadata:  ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+        error as Error
+      );
+    }
+  }
+
   /**
    * Initializes the collection metadata with the given name and options.
    *
@@ -28,16 +100,9 @@ export default class Metadata {
    * with an empty object. Defaults to false.
    * @returns The initialized collection metadata.
    */
-  #initializeMetadata(
-    name: string,
-    generateMetadata?: boolean
-  ): CollectionMetadata {
-    if (generateMetadata) {
-      return {} as CollectionMetadata;
-    }
-
+  #initializeMetadata(name: string): CollectionMetadata {
     return {
-      name,
+      name: basename(name, ".json"),
       documentCount: 0,
       indexes: [],
       lastModified: Date.now(),
@@ -54,101 +119,32 @@ export default class Metadata {
    *
    * @returns A promise that resolves when the metadata is loaded.
    */
-  async loadMetadata(): Promise<void> {
-    const metadataLoadMuxex = new AsyncMutex();
+  async load(): Promise<void> {
     try {
-      metadataLoadMuxex.lock();
+      const [stats, data] = await Promise.all([
+        stat(this.#metadataPath),
+        readFile(this.#metadataPath, "utf-8"),
+        // new Promise((_, reject) =>
+        //   setTimeout(
+        //     () => reject(new Error("Metadata load timeout")),
+        //     METADATA_PARSE_TIMEOUT
+        //   )
+        // ),
+      ]);
 
-      const filestats = await stat(this.#metadataPath);
-
-      // Proteção contra arquivos de metadados muito grandes
-      if (filestats.size > 1024 * 10) {
-        // 10KB
+      if (stats.size > MAX_METADATA_SIZE) {
         throw new Error("Metadata file is too large");
       }
 
-      const data = await Promise.race([
-        readFile(this.#metadataPath, "utf-8"),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error("Metadata read timeout")), 500)
-        ),
-      ]);
+      const parsed = parse(data);
+      const validated = await this.#validateMetadata(parsed);
 
-      // Validação estrutural segura do metadata
-      try {
-        const parsedMetadata = JSON.parse(data as string);
-
-        // Validação estrutural básica
-        if (!parsedMetadata || typeof parsedMetadata !== "object") {
-          throw new Error("Invalid metadata structure");
-        }
-
-        this.#metadata = {
-          name: parsedMetadata.name || this.#metadata.name,
-          documentCount: parsedMetadata.documentCount || 0,
-          indexes: parsedMetadata.indexes || [],
-          lastModified: parsedMetadata.lastModified || Date.now(),
-        };
-      } catch (parseError) {
-        // Tratamento de erro de parsing
-        console.warn("Metadata parsing error, reinitializing", parseError);
-        await this.saveMetadata();
-      }
-    } catch (error) {
-      console.error("Metadata load failed", {
-        path: this.#metadataPath,
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-
-      // Fallback para metadata padrão
       this.#metadata = {
-        name: basename(this.#metadataPath),
-        documentCount: 0,
-        indexes: [],
-        lastModified: Date.now(),
+        ...this.#initializeMetadata(this.#metadata.name),
+        ...validated,
       };
-
-      await this.saveMetadata();
-    } finally {
-      metadataLoadMuxex.unlock();
-    }
-  }
-
-  /**
-   * Saves the collection metadata to the file system.
-   *
-   * Serializes the metadata to JSON and writes it to the metadata file.
-   *
-   * @returns A promise that resolves when the metadata is saved.
-   */
-  async saveMetadata(metadata?: Partial<CollectionMetadata>): Promise<void> {
-    const updateMutex = new AsyncMutex();
-    try {
-      updateMutex.lock();
-
-      const updatedMetadata: CollectionMetadata = {
-        ...this.#metadata,
-        ...metadata,
-        lastModified: Date.now(),
-      };
-
-      const metadataContent = JSON.stringify(updatedMetadata, null, 0);
-
-      await writeFile(this.#metadataPath, metadataContent, {
-        flag: "w", // Modo de escrita
-        mode: 0o666, // Permisoes de escrita
-      });
-
-      this.#metadata = updatedMetadata;
-    } catch (error: Error | any) {
-      console.error("Metadata Persistence Error:", {
-        path: this.#metadataPath,
-        errorCode: error instanceof Error ? error.message : "UNKNOWN_ERROR",
-      });
-
-      throw new MetadataPersistenceError("Failed to save metadata", error);
-    } finally {
-      updateMutex.unlock();
+    } catch (error) {
+      await this.#persist(this.#metadata);
     }
   }
 }
