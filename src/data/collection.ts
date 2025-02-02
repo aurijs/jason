@@ -160,7 +160,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @returns A promise that resolves to the created document.
    * @throws An error if the document failed schema validation or if the collection did not exist.
    */
-  async create(data: Omit<Document<Collections, K>, "id">) {
+  async create(data: Document<Collections, K>) {
     try {
       // Parallel promise execution
       await this.ensureCollectionExists();
