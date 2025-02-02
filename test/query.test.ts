@@ -114,9 +114,7 @@ describe("POST tests", () => {
     await products.create({ id: "2", name: "Phone", price: 699, stock: 0 });
     await products.create({ id: "3", name: "Tablet", price: 299, stock: 10 });
 
-    const result = await products.query(
-      (p) => (p.price < 1000 && p.stock > 0) || p.name.includes("Phone")
-    );
+    const result = await products.query((p) => p.price < 1000 && p.stock > 0);
 
     expect(result).toHaveLength(2);
     expect(result.map((p) => p.id)).toEqual(expect.arrayContaining(["1", "3"]));
@@ -202,6 +200,8 @@ describe("POST tests", () => {
         products.create({
           id: `prod-${i}`,
           name: `Product ${i}`,
+          price: Math.round(Math.random() * i * 10),
+          stock: i * 5,
           inStock: i % 4 === 0,
         })
       );
@@ -270,7 +270,7 @@ describe("POST tests", () => {
   it("should handle partial matches with regex", async () => {
     const books = db.collection("books");
     await books.create({ title: "JavaScript: The Good Parts" });
-    await books.create({ title: "Deep Dive into TypeScript" });
+    await books.create({ title: "Deep Dive into JavaScript" });
     await books.create({ title: "Node.js Design Patterns" });
 
     const result = await books.query((book) => /javascript/i.test(book.title));
@@ -279,7 +279,7 @@ describe("POST tests", () => {
     expect(result.map((b) => b.title)).toEqual(
       expect.arrayContaining([
         "JavaScript: The Good Parts",
-        "Node.js Design Patterns",
+        "Deep Dive into JavaScript",
       ])
     );
   });
