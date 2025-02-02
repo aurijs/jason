@@ -100,7 +100,7 @@ describe("POST tests", () => {
     await users.create({ name: "Alice", age: 30, email: "a@a.com" });
     await users.create({ name: "Bob", age: 35, email: "b@b.com" });
 
-    const result = await users.query((user) => user.age > 28 && user.age < 35);
+    const result = await users.query((user) => user.age > 28 && user.age < 38);
 
     expect(result).toHaveLength(2);
     expect(result.map((u) => u.name)).toEqual(
