@@ -99,7 +99,7 @@ testReadSuite(
     name: "John Doe",
     email: "john@example.com",
     age: 30,
-  },
+  } as any,
   { name: "Updated Name", age: 31 }
 );
 
@@ -110,6 +110,6 @@ testReadSuite(
     title: "Original Title",
     content: "Original Content",
     authorId: "author1",
-  },
+  } as any,
   { title: "Updated Title", content: "Updated Content" }
 );

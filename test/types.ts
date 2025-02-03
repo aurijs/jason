@@ -34,8 +34,14 @@ interface Log {
 }
 
 interface Event {
-	name: string;
-	date: number;
+  name: string;
+  date: number;
+}
+
+interface Book {
+  id: string;
+  title: string;
+  author: string;
 }
 
 export interface TestCollections {
