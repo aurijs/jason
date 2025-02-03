@@ -12,16 +12,14 @@ import path from "node:path";
 import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
 import Writer from "../io/writer.js";
 import type {
-  CollectionMetadata,
+  CollectionParam,
   CollectionOptions,
-  ConcurrencyStrategy,
   Document,
   ValidationFunction,
 } from "../types/index.js";
-// import AsyncMutex from "../utils/mutex.js";
+import { Mutex } from "async-mutex";
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
-import { Mutex } from "async-mutex";
 
 export default class Collection<Collections, K extends keyof Collections> {
   #basePath: string;
@@ -108,47 +106,6 @@ export default class Collection<Collections, K extends keyof Collections> {
   }
 
   /**
-   * Attempts to acquire a lock on a document by creating a lock file.
-   *
-   * Generates a unique lock ID and writes it to a lock file associated with the document.
-   * If the lock file is successfully created, it returns the lock ID. If an error occurs,
-   * it returns null.
-   *
-   * @param id - The id of the document to be locked.
-   * @returns A promise that resolves to the lock ID if the lock is successfully acquired, or null if it fails.
-   */
-  private async acquireLock(id: string): Promise<string | null> {
-    const lockPath = this.getDocumentPath(`${id}.lock`);
-    try {
-      const lockId = crypto.randomBytes(16).toString("hex");
-      await writeFile(lockPath, lockId);
-      return lockId;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Releases a lock on a document by deleting the lock file.
-   *
-   * Checks the lock ID against the one stored in the lock file and if they match, it deletes the lock file.
-   * If the lock ID does not match, it does not delete the file.
-   *
-   * @param id - The id of the document to be unlocked.
-   * @param lockId - The lock ID to match against the one stored in the lock file.
-   * @returns A promise that resolves when the lock is released.
-   */
-  private async releaseLock(id: string, lockId: string): Promise<void> {
-    const lockPath = this.getDocumentPath(`${id}.lock`);
-    try {
-      const savedLockId = await readFile(lockPath, "utf-8");
-      if (savedLockId === lockId) {
-        await unlink(lockPath);
-      }
-    } catch {}
-  }
-
-  /**
    * Creates a new document in the collection.
    *
    * Ensures that the collection exists. Generates a random id for the document and validates it against the schema.
@@ -160,9 +117,8 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @returns A promise that resolves to the created document.
    * @throws An error if the document failed schema validation or if the collection did not exist.
    */
-  async create(data: Document<Collections, K>) {
+  async create(data: CollectionParam<Collections, K>) {
     try {
-      // Parallel promise execution
       await this.ensureCollectionExists();
       await this.#metadata?.load();
 
@@ -182,8 +138,6 @@ export default class Collection<Collections, K extends keyof Collections> {
 
       return document;
     } catch (error) {
-      console.log(error);
-
       if ((error as Error).message === "Document failed schema validation") {
         throw error;
       }
@@ -204,6 +158,8 @@ export default class Collection<Collections, K extends keyof Collections> {
    */
   async read(id: string) {
     const cached = this.#cache.get(id);
+    console.log("cached", cached);
+
     if (cached) return cached;
 
     try {
@@ -277,10 +233,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @throws An error if the lock cannot be acquired or if the update operation
    * encounters an error.
    */
-  async update(
-    id: string,
-    data: Partial<Omit<Document<Collections, K>, "id">>
-  ) {
+  async update(id: string, data: Partial<CollectionParam<Collections, K>>) {
     const current = await this.read(id);
     if (!current) return null;
 
@@ -290,13 +243,16 @@ export default class Collection<Collections, K extends keyof Collections> {
       id: current.id,
     } as Document<Collections, K>;
 
+    this.#cache.update(id, updated);
+
+    console.log(updated);
+
     if (!this.#schema(updated)) {
       throw new Error("Document failed schema validation");
     }
 
     await this.#writer.write(id, stringify(updated));
     await this.#metadata?.updateLastModified();
-    this.#cache.update(id, updated);
     return updated;
   }
 
@@ -314,10 +270,9 @@ export default class Collection<Collections, K extends keyof Collections> {
 
       const documentPath = this.getDocumentPath(id);
 
-      // Operações concorrentes otimizadas
       const [documentExists] = await Promise.allSettled([
         access(documentPath),
-        this.#cache.get(id), // Verifica se o documento existe na cache
+        this.#cache.get(id), 
       ]);
 
       if (documentExists.status === "rejected") {
