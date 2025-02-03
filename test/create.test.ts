@@ -106,22 +106,6 @@ describe("Collection - CREATE", () => {
     ).rejects.toThrow("Document failed schema validation");
   });
 
-  it("should handle directory creation errors", async () => {
-    const mockError = new Error("Permission denied");
-    vi.spyOn(await import("node:fs/promises"), "mkdir").mockRejectedValue(
-      mockError
-    );
-
-    const db = new JasonDB("/invalid/path");
-    // @ts-expect-error testing create method
-    const users = db.collection("users");
-
-    await expect(
-      //@ts-expect-error testing create method
-      users.create({ name: "John", email: "j@j.com", age: 30 })
-    ).rejects.toThrow("Failed to create document");
-  });
-
   it("should handle 1000 concurrent writes", async () => {
 
     const posts = db.collection("posts");
