@@ -88,14 +88,15 @@ export default class Writer {
   }
 
   /**
-   * Writes data to a file.
+   * Writes data to a file with the given filename.
    *
-   * If the file is already being written, the data is queued until the previous
-   * write operation is complete.
+   * If the file is currently being written to, the data is queued to be written
+   * once the current write operation completes. Ensures that writes are
+   * performed atomically and handles concurrent write requests by queuing them.
    *
-   * @param fileName The name of the file to write to
-   * @param data The data to write to the file
-   * @returns A promise that resolves to true when the write operation is complete
+   * @param fileName - The name of the file to write to.
+   * @param data - The data to be written to the file.
+   * @returns A promise that resolves to true when the write operation is complete.
    */
   async write(fileName: string, data: string) {
     if (!this.#queue.has(fileName)) {
