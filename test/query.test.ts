@@ -4,7 +4,7 @@ import path from "node:path";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-describe("POST tests", () => {
+describe("POST - Query", () => {
   const testFilename = "test_query_db";
   const filePath = path.join(process.cwd(), `${testFilename}`);
 
@@ -269,9 +269,18 @@ describe("POST tests", () => {
 
   it("should handle partial matches with regex", async () => {
     const books = db.collection("books");
-    await books.create({ title: "JavaScript: The Good Parts" });
-    await books.create({ title: "Deep Dive into JavaScript" });
-    await books.create({ title: "Node.js Design Patterns" });
+    await books.create({
+      title: "JavaScript: The Good Parts",
+      author: "Douglas Crockford",
+    });
+    await books.create({
+      title: "Deep Dive into JavaScript",
+      author: "Nicholas C. Zakas",
+    });
+    await books.create({
+      title: "Node.js Design Patterns",
+      author: "Nicholas C. Zakas",
+    });
 
     const result = await books.query((book) => /javascript/i.test(book.title));
 

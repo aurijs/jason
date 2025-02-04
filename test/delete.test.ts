@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-describe("USER tests", () => {
+describe("USER - DELETE", () => {
 	const testFilename = "test_delete_db";
 	const filePath = path.join(process.cwd(), `${testFilename}`);
 	let db: JasonDB<TestCollections>;

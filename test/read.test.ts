@@ -29,7 +29,7 @@ function testReadSuite<T extends keyof TestCollections>(
   validData: Document<TestCollections, T>,
   updateData: Partial<Document<TestCollections, T>>
 ) {
-  describe(`${String(collectionName)} read tests`, () => {
+  describe(`${String(collectionName)} - READ`, () => {
     it("should read an existing document", async () => {
       const collection = db.collection(collectionName);
       const created = await collection.create(validData);
@@ -42,7 +42,6 @@ function testReadSuite<T extends keyof TestCollections>(
       const collection = db.collection(collectionName);
       expect(await collection.read("non-existent-id")).toBeNull();
     });
-
 
     it("should return null after document deletion", async () => {
       const collection = db.collection(collectionName);
@@ -74,11 +73,7 @@ function testReadSuite<T extends keyof TestCollections>(
       const collection = db.collection(collectionName);
       const created = await collection.create(validData);
       await collection.update(created.id, updateData);
-
       const retrieved = await collection.read(created.id);
-
-	  console.log(retrieved);
-	  
       expect(retrieved).toMatchObject({ ...validData, ...updateData });
     });
 
