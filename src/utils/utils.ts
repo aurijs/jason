@@ -1,31 +1,26 @@
+
 /**
- * Retries an async operation until it succeeds or the maximum number of retries is reached.
- *
- * Retries are performed with an exponential backoff strategy, with a random 10% jitter
- * added to the delay between retries. The delay for the `n`th retry is given by
- * `baseDelay * 2^n * (1 + 0.1 * random())`.
+ * Retries an async operation a specified number of times, with exponential backoff between retries.
  *
  * @param fn - The async operation to retry.
- * @param maxRetries - The maximum number of times to retry the operation. Defaults to 10.
- * @param baseDelay - The base delay in milliseconds between retries. Defaults to 50.
- * @throws Error - If the maximum number of retries is exceeded.
+ * @param maxRetries - The maximum number of retries. Defaults to 10.
+ * @param baseDelay - The initial delay in milliseconds. Defaults to 10.
+ * @returns The result of the successfully executed operation.
+ * @throws The error that caused the last retry to fail.
  */
-export async function retryAsyncOperation(
-  fn: () => Promise<void>,
+export async function retryAsyncOperation<T>(
+  fn: () => Promise<T>,
   maxRetries = 10,
-  baseDelay = 50
-): Promise<void> {
-  let attempt = 0;
-
-  while (attempt < maxRetries) {
+  baseDelay = 10
+) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
-      const delay =
-        baseDelay * (2 ** attempt) * (1 + Math.random() * 0.1);
-      await new Promise((resolve) => setImmediate(resolve, delay));
-      attempt++;
+      if (i === maxRetries - 1) throw error;
+      await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
     }
   }
-  throw new Error("Max retries exceeded");
+
+  throw new Error("Unreachable");
 }
