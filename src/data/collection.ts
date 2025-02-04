@@ -1,13 +1,6 @@
-import { Mutex } from "async-mutex";
 import { parse, stringify } from "devalue";
 import crypto from "node:crypto";
-import {
-  access,
-  mkdir,
-  readdir,
-  readFile,
-  unlink
-} from "node:fs/promises";
+import { access, mkdir, readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
 import Writer from "../io/writer.js";
@@ -195,7 +188,22 @@ export default class Collection<Collections, K extends keyof Collections> {
         batchResults.filter(Boolean) as Document<Collections, K>[]
       );
     }
-    return result;
+
+    result.sort((a, b) => a.id.localeCompare(b.id));
+
+    let finalResult = result;
+    const skip = options?.skip ?? 0;
+    const limit = options?.limit;
+
+    if (skip > 0) {
+      finalResult = finalResult.slice(skip);
+    }
+
+    if (limit && limit >= 0) {
+      finalResult = finalResult.slice(0, limit);
+    }
+
+    return finalResult;
   }
 
   /**
@@ -252,67 +260,56 @@ export default class Collection<Collections, K extends keyof Collections> {
   }
 
   /**
-   * Deletes a document from the collection.
+   * Deletes a document with the specified id from the collection.
    *
-   * @param id - The id of the document to be deleted.
-   * @returns A promise that resolves to true if the document was successfully deleted, or false if the deletion failed.
+   * @param id - The id of the document to delete.
+   * @returns A promise that resolves to true if the document is successfully
+   * deleted.
+   * @throws DocumentNotFoundError if the document does not exist.
+   * @throws DeleteOperationError if an error is encountered during the deletion
+   * operation.
    */
   async delete(id: string) {
-    const deleteMutex = new Mutex();
-
     try {
-      await deleteMutex.acquire();
-
       const documentPath = this.getDocumentPath(id);
 
-      const [documentExists] = await Promise.allSettled([
-        access(documentPath),
-        this.#cache.get(id), 
-      ]);
-
-      if (documentExists.status === "rejected") {
+      if (!(await this.has(id))) {
         throw new DocumentNotFoundError(`Document: ${id} not found`);
       }
 
-      await Promise.race([
-        unlink(documentPath),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Delete operation timeout")), 500)
-        ),
-      ]);
-
-      await Promise.all([
-        this.#metadata?.decrementDocumentCount(),
-        this.#cache.delete(id),
-      ]);
+      unlink(documentPath);
+      this.#metadata?.decrementDocumentCount();
+      this.#cache.delete(id);
 
       return true;
     } catch (error) {
-      // Erro customizado para melhor rastreabilidade
       throw new DeleteOperationError("Failed to delete document", error);
-    } finally {
-      deleteMutex.release();
     }
   }
 
   /**
-   * Executes a query on the collection.
+   * Queries documents in the collection based on the provided filter function.
    *
-   * The query is executed using a custom filter function that takes a document
-   * as an argument and returns a boolean indicating whether the document should
-   * be included in the result set.
+   * Retrieves documents from the collection, applies the filter function to each
+   * document, and returns an array of documents that match the filter criteria.
+   * Supports concurrent processing and batch processing for efficiency.
    *
-   * @param filter - The filter function to apply to the documents in the collection.
+   * @param filter - A function that takes a document and returns a boolean
+   * indicating whether the document matches the filter criteria.
    * @param options - Optional parameters to control the query execution.
-   * @param options.concurrent - Whether to execute the query concurrently.
-   * @param options.batchSize - The number of documents to process in parallel.
-   * @returns A promise that resolves to an array of documents that match the filter.
+   * @param options.batchSize - The number of documents to process in each batch.
+   * @param options.skip - The number of documents to skip from the start of the
+   * result.
+   * @param options.limit - The maximum number of documents to return.
+   * @returns A promise that resolves to an array of documents matching the filter
+   * criteria.
    */
   async query(
     filter: (doc: Document<Collections, K>) => boolean,
     options: {
-      concurrent?: boolean;
       batchSize?: number;
+      skip?: number;
+      limit?: number;
     } = {}
   ) {
     const files = await readdir(this.#basePath, { withFileTypes: true });
@@ -321,8 +318,9 @@ export default class Collection<Collections, K extends keyof Collections> {
       .map((file) => file.name);
 
     const results: Document<Collections, K>[] = [];
-    for (let i = 0; i < jsonFiles.length; i += 100) {
-      const batch = jsonFiles.slice(i, i + 100);
+    const batchSize = options.batchSize ?? 100;
+    for (let i = 0; i < jsonFiles.length; i += batchSize) {
+      const batch = jsonFiles.slice(i, i + batchSize);
       const batchDocs = (await Promise.all(
         batch.map((name) => this.read(name.replace(".json", "")))
       )) as Document<Collections, K>[];
@@ -330,6 +328,20 @@ export default class Collection<Collections, K extends keyof Collections> {
       results.push(...batchDocs.filter((d) => d && filter(d)));
     }
 
-    return results;
+    results.sort((a, b) => a.id.localeCompare(b.id));
+
+    let finalResult = results;
+    const skip = options.skip ?? 0;
+    const limit = options.limit;
+
+    if (skip > 0) {
+      finalResult = results.slice(skip);
+    }
+
+    if (limit && limit >= 0) {
+      finalResult = finalResult.slice(0, limit);
+    }
+
+    return finalResult;
   }
 }
