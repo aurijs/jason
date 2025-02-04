@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
-import type { TestCollections } from "./types";
 import { Document } from "../src/types";
+import type { TestCollections } from "./types";
 
 const testFilename = "test_read_db";
 const filePath = path.join(process.cwd(), testFilename);
@@ -86,6 +86,35 @@ function testReadSuite<T extends keyof TestCollections>(
     });
   });
 }
+
+it("should apply skip and limit in readAll", async () => {
+  const users = db.collection("users");
+
+  for (let i = 1; i <= 5; i++) {
+    await users.create({
+      id: String(i),
+      name: `User ${i}`,
+      email: `user${i}@example.com`,
+      age: 20 + i,
+    });
+  }
+
+  const allUsers = await users.readAll();
+  expect(allUsers.length).toBe(5);
+  expect(allUsers.map((u) => u.id)).toEqual(["1", "2", "3", "4", "5"]);
+
+  const limited = await users.readAll({ limit: 2 });
+  expect(limited.length).toBe(2);
+  expect(limited.map((u) => u.id)).toEqual(["1", "2"]);
+
+  const skipped = await users.readAll({ skip: 3 });
+  expect(skipped.length).toBe(2);
+  expect(skipped.map((u) => u.id)).toEqual(["4", "5"]);
+
+  const combined = await users.readAll({ skip: 1, limit: 2 });
+  expect(combined.length).toBe(2);
+  expect(combined.map((u) => u.id)).toEqual(["2", "3"]);
+});
 
 testReadSuite(
   "users",
