@@ -1,5 +1,6 @@
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { retryAsyncOperation } from "../utils/utils.js";
 
 interface FileState {
   locked: boolean;
@@ -21,23 +22,6 @@ function getTempPath(path: string) {
 
 function getFilePath(basePath: string, fileName: string) {
   return join(basePath, `${fileName}.json`);
-}
-
-async function retryAsyncOperation<T>(
-  operation: () => Promise<T>,
-  maxRetries = 10,
-  baseDelay = 10
-) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
-    }
-  }
-
-  throw new Error("Unreachable");
 }
 
 export default class Writer {
