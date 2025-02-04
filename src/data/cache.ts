@@ -50,11 +50,15 @@ export default class Cache<T = BaseDocument> {
    */
   update(id: string, value: T): void {
     if (this.#data.has(id)) {
+      const entry = this.#data.get(id)!;
+      entry.value = value;
+      entry.timestamp = this.#getNow();
       this.#refresh(id);
     } else {
       if (this.#data.size >= this.#maxSize) {
         this.#evict(Math.floor(this.#maxSize * 0.1));
       }
+
       this.#data.set(id, { value, timestamp: this.#getNow() });
       this.#queue.push(id);
     }
