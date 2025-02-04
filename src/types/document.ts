@@ -13,9 +13,8 @@
  * @property _lastModified The last modified timestamp of the item. Only used by the versioning concurrency strategy.
  */
 export type BaseDocument<T = Record<string, unknown>> = T & {
-    id?: string;
-    _version?: number;
-    _lastModified?: number;
+    id: string;
+    _lastModified: number;
 };
 
 /**

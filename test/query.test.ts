@@ -4,7 +4,7 @@ import path from "node:path";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
-describe("POST tests", () => {
+describe("POST - Query", () => {
   const testFilename = "test_query_db";
   const filePath = path.join(process.cwd(), `${testFilename}`);
 
@@ -50,8 +50,7 @@ describe("POST tests", () => {
     await posts.create(postData3);
 
     const author1Posts = await posts.query(
-      (post) => post.authorId === "author-1",
-      { concurrent: true }
+      (post) => post.authorId === "author-1"
     );
 
     expect(author1Posts).toHaveLength(2);
@@ -59,8 +58,7 @@ describe("POST tests", () => {
     expect(author1Posts[1].authorId).toBe("author-1");
 
     const author2Posts = await posts.query(
-      (post) => post.authorId === "author-2",
-      { concurrent: true }
+      (post) => post.authorId === "author-2"
     );
     expect(author2Posts).toHaveLength(1);
     expect(author2Posts[0].authorId).toBe("author-2");
@@ -85,8 +83,7 @@ describe("POST tests", () => {
     await posts.create(postData2);
 
     const authorPosts = await posts.query(
-      (post) => post.authorId === "author-1",
-      { concurrent: true }
+      (post) => post.authorId === "author-1"
     );
 
     expect(authorPosts).toHaveLength(2);
@@ -100,7 +97,7 @@ describe("POST tests", () => {
     await users.create({ name: "Alice", age: 30, email: "a@a.com" });
     await users.create({ name: "Bob", age: 35, email: "b@b.com" });
 
-    const result = await users.query((user) => user.age > 28 && user.age < 35);
+    const result = await users.query((user) => user.age > 28 && user.age < 38);
 
     expect(result).toHaveLength(2);
     expect(result.map((u) => u.name)).toEqual(
@@ -114,9 +111,7 @@ describe("POST tests", () => {
     await products.create({ id: "2", name: "Phone", price: 699, stock: 0 });
     await products.create({ id: "3", name: "Tablet", price: 299, stock: 10 });
 
-    const result = await products.query(
-      (p) => (p.price < 1000 && p.stock > 0) || p.name.includes("Phone")
-    );
+    const result = await products.query((p) => p.price < 1000 && p.stock > 0);
 
     expect(result).toHaveLength(2);
     expect(result.map((p) => p.id)).toEqual(expect.arrayContaining(["1", "3"]));
@@ -165,7 +160,6 @@ describe("POST tests", () => {
     await Promise.all(promises);
 
     const results = await logs.query((log) => log.severity === "ERROR", {
-      concurrent: true,
       batchSize: 50,
     });
 
@@ -191,35 +185,6 @@ describe("POST tests", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("1");
-  });
-
-  it("should handle concurrent and non-concurrent modes", async () => {
-    const products = db.collection("products");
-    const promises: any[] = [];
-
-    for (let i = 0; i < 100; i++) {
-      promises.push(
-        products.create({
-          id: `prod-${i}`,
-          name: `Product ${i}`,
-          inStock: i % 4 === 0,
-        })
-      );
-    }
-
-    await Promise.all(promises);
-
-    const concurrentResults = await products.query((p) => p.inStock!, {
-      concurrent: true,
-      batchSize: 20,
-    });
-
-    const sequentialResults = await products.query((p) => p.inStock!, {
-      concurrent: false,
-    });
-
-    expect(concurrentResults.length).toBe(25);
-    expect(sequentialResults.length).toBe(25);
   });
 
   it("should handle array operations in queries", async () => {
@@ -269,9 +234,18 @@ describe("POST tests", () => {
 
   it("should handle partial matches with regex", async () => {
     const books = db.collection("books");
-    await books.create({ title: "JavaScript: The Good Parts" });
-    await books.create({ title: "Deep Dive into TypeScript" });
-    await books.create({ title: "Node.js Design Patterns" });
+    await books.create({
+      title: "JavaScript: The Good Parts",
+      author: "Douglas Crockford",
+    });
+    await books.create({
+      title: "Deep Dive into JavaScript",
+      author: "Nicholas C. Zakas",
+    });
+    await books.create({
+      title: "Node.js Design Patterns",
+      author: "Nicholas C. Zakas",
+    });
 
     const result = await books.query((book) => /javascript/i.test(book.title));
 
@@ -279,8 +253,48 @@ describe("POST tests", () => {
     expect(result.map((b) => b.title)).toEqual(
       expect.arrayContaining([
         "JavaScript: The Good Parts",
-        "Node.js Design Patterns",
+        "Deep Dive into JavaScript",
       ])
     );
+  });
+
+  it("should apply skip and limit in query", async () => {
+    const users = db.collection("users");
+
+    for (let i = 1; i <= 5; i++) {
+      await users.create({
+        id: String(i),
+        name: `User ${i}`,
+        email: `user${i}@example.com`,
+        age: 20 + i,
+      });
+    }
+
+    const allUsers = await users.query(() => true);
+    expect(allUsers.length).toBe(5);
+
+    const adults = await users.query((u) => u.age >= 24, { limit: 2 });
+    expect(adults.length).toBe(2);
+    expect(adults.map((u) => u.id)).toEqual(["4", "5"]);
+
+    const skipped = await users.query((u) => u.age >= 22, { skip: 1 });
+    expect(skipped.length).toBe(3);
+  });
+
+  it("should respect batchSize in query", async () => {
+    const users = db.collection("users");
+
+    for (let i = 1; i <= 150; i++) {
+      await users.create({
+        id: String(i),
+        name: `User ${i}`,
+        email: `user${i}@example.com`,
+        age: 20 + i,
+      });
+    }
+
+    const result = await users.query(() => true, { batchSize: 50 });
+
+    expect(result.length).toBe(150);
   });
 });

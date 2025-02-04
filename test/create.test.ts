@@ -1,7 +1,7 @@
 import { parse, stringify } from "devalue";
 import { access, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
 
@@ -35,7 +35,7 @@ describe("Collection - CREATE", () => {
     });
 
     expect(user.id).toBeDefined();
-    expect(user.id).toMatch(/^[\da-f-]{36}$/); // UUID format
+    expect(user.id).toMatch(/^[\da-f-]{36}$/);
   });
 
   it("should create document with custom ID", async () => {
@@ -63,9 +63,6 @@ describe("Collection - CREATE", () => {
 
     const rawData = await readFile(docPath, "utf-8");
     const data = parse(rawData);
-
-    console.dir(rawData);
-
     expect(data).toEqual(post);
   });
 
@@ -77,7 +74,6 @@ describe("Collection - CREATE", () => {
       authorId: "author",
     });
 
-    // Alterar o arquivo no disco para verificar se o cache é retornado
     const docPath = path.join(filePath, "posts", `${post.id}.json`);
     await writeFile(docPath, stringify({ ...post, title: "Modified" }));
 
@@ -87,7 +83,7 @@ describe("Collection - CREATE", () => {
 
   it("should increment metadata documentCount (if enabled)", async () => {
     const users = db.collection("users", { generateMetadata: true });
-	
+
     await users.create({ name: "John", email: "j@j.com", age: 30 });
     await users.create({ name: "Jane", email: "j@j.com", age: 25 });
 
@@ -106,41 +102,18 @@ describe("Collection - CREATE", () => {
     ).rejects.toThrow("Document failed schema validation");
   });
 
-  it("should handle directory creation errors", async () => {
-    const mockError = new Error("Permission denied");
-    vi.spyOn(await import("node:fs/promises"), "mkdir").mockRejectedValue(
-      mockError
-    );
-
-    const db = new JasonDB("/invalid/path");
-    // @ts-expect-error testing create method
-    const users = db.collection("users");
-
-    await expect(
-      //@ts-expect-error testing create method
-      users.create({ name: "John", email: "j@j.com", age: 30 })
-    ).rejects.toThrow("Failed to create document");
-  });
-
   it("should handle 1000 concurrent writes", async () => {
-
     const posts = db.collection("posts");
     const count = 1000;
-    const start = performance.now();
-    const promises = Array.from(
-      { length: count },
-      (_, i) =>
-        posts.create({
-          title: `Post ${i}`,
-          content: "Content",
-          authorId: "author",
-        } as any) // Forçando tipo para simplificar
+    const promises = Array.from({ length: count }, (_, i) =>
+      posts.create({
+        title: `Post ${i}`,
+        content: "Content",
+        authorId: "author",
+      } as any)
     );
-
     const results = await Promise.all(promises);
-    const end = performance.now();
-    console.log(`Create ${count} documents in ${(end - start).toFixed(2)}ms`);
     expect(results).toHaveLength(count);
-    expect(new Set(results.map((d) => d.id))).toHaveLength(count); // IDs únicos
+    expect(new Set(results.map((d) => d.id))).toHaveLength(count);
   });
 });

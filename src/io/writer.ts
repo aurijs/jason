@@ -1,5 +1,6 @@
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { retryAsyncOperation } from "../utils/utils.js";
 
 interface FileState {
   locked: boolean;
@@ -21,23 +22,6 @@ function getTempPath(path: string) {
 
 function getFilePath(basePath: string, fileName: string) {
   return join(basePath, `${fileName}.json`);
-}
-
-async function retryAsyncOperation<T>(
-  operation: () => Promise<T>,
-  maxRetries = 10,
-  baseDelay = 10
-) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
-    }
-  }
-
-  throw new Error("Unreachable");
 }
 
 export default class Writer {
@@ -88,14 +72,15 @@ export default class Writer {
   }
 
   /**
-   * Writes data to a file.
+   * Writes data to a file with the given filename.
    *
-   * If the file is already being written, the data is queued until the previous
-   * write operation is complete.
+   * If the file is currently being written to, the data is queued to be written
+   * once the current write operation completes. Ensures that writes are
+   * performed atomically and handles concurrent write requests by queuing them.
    *
-   * @param fileName The name of the file to write to
-   * @param data The data to write to the file
-   * @returns A promise that resolves to true when the write operation is complete
+   * @param fileName - The name of the file to write to.
+   * @param data - The data to be written to the file.
+   * @returns A promise that resolves to true when the write operation is complete.
    */
   async write(fileName: string, data: string) {
     if (!this.#queue.has(fileName)) {

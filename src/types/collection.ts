@@ -1,22 +1,26 @@
-import type { BaseDocument, ExtractDocument } from './document.js'
-import type { ValidationFunction } from './utils.js'
-import type { ConcurrencyStrategy } from './concurrency.js'
+import type { BaseDocument, Document, ExtractDocument } from "./document.js";
+import type { ValidationFunction } from "./utils.js";
 
 /**
  * Type to extract the document type from a collection
  */
 export type CollectionDocument<
-    T extends BaseCollections,
-    K extends keyof T,
+  T extends BaseCollections,
+  K extends keyof T
 > = BaseDocument<ExtractDocument<T[K]>>;
 
 /**
  * Base interface for collections map in JasonDB
  */
 export interface BaseCollections {
-    [key: string]: unknown[];
+  [key: string]: unknown[];
 }
 
+export type CollectionParam<
+  Collections,
+  T extends keyof Collections
+> = Omit<Document<Collections, T>, "id" | "_lastModified"> &
+  Partial<Pick<Document<Collections, T>, "id" | "_lastModified">>;
 
 /**
  * Options for configuring a collection.
@@ -29,9 +33,8 @@ export interface BaseCollections {
  * @property generateMetadata - An optional flag to generate metadata for documents in the collection.
  */
 export interface CollectionOptions<T = BaseDocument> {
-    initialData?: T[];
-    schema?: ValidationFunction<T>;
-    concurrencyStrategy?: ConcurrencyStrategy;
-    cacheTimeout?: number;
-    generateMetadata?: boolean;
+  initialData?: T[];
+  schema?: ValidationFunction<T>;
+  cacheTimeout?: number;
+  generateMetadata?: boolean;
 }

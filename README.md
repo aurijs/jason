@@ -100,24 +100,6 @@ await collection.delete("id");
 const results = await collection.query(doc => doc.age > 18);
 ```
 
-## 🔐 Concurrency Strategies
-
-Choose the strategy that best fits your needs:
-
-- ✨ **Optimistic** (default)
-
-  - Perfect for most use cases
-  - Prevents update conflicts
-
-- 📝 **Versioning**
-
-  - Stricter control
-  - Change tracking
-
-- ⚡ **None**
-  - Maximum performance
-  - Use with caution
-
 ## 🤝 Contributing
 
 Contributions are welcome!
