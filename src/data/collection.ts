@@ -1,3 +1,4 @@
+import { Mutex } from "async-mutex";
 import { parse, stringify } from "devalue";
 import crypto from "node:crypto";
 import {
@@ -5,19 +6,17 @@ import {
   mkdir,
   readdir,
   readFile,
-  unlink,
-  writeFile,
+  unlink
 } from "node:fs/promises";
 import path from "node:path";
 import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
 import Writer from "../io/writer.js";
 import type {
-  CollectionParam,
   CollectionOptions,
+  CollectionParam,
   Document,
   ValidationFunction,
 } from "../types/index.js";
-import { Mutex } from "async-mutex";
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
 
@@ -158,8 +157,6 @@ export default class Collection<Collections, K extends keyof Collections> {
    */
   async read(id: string) {
     const cached = this.#cache.get(id);
-    console.log("cached", cached);
-
     if (cached) return cached;
 
     try {
@@ -243,16 +240,14 @@ export default class Collection<Collections, K extends keyof Collections> {
       id: current.id,
     } as Document<Collections, K>;
 
-    this.#cache.update(id, updated);
-
-    console.log(updated);
-
     if (!this.#schema(updated)) {
       throw new Error("Document failed schema validation");
     }
 
     await this.#writer.write(id, stringify(updated));
     await this.#metadata?.updateLastModified();
+    this.#cache.update(id, updated);
+
     return updated;
   }
 
