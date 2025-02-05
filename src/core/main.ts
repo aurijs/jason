@@ -16,7 +16,9 @@ export default class JasonDB<T> {
    * @param basePath - The base path where the database files will be stored.
    */
   constructor(basePath: string = "db") {
-    this.#basePath = path.join(process.cwd(), `${basePath}`);
+    const cwd = path.resolve('.')
+    this.#basePath = path.join(cwd, `${basePath}`);
+
     this.#ensureDataDirExists();
   }
 
