@@ -46,7 +46,7 @@ export default class Collection<Collections, K extends keyof Collections> {
 
     this.#cache = new Cache<Document<Collections, K>>(options.cacheTimeout);
 
-    this.ensureCollectionExists();
+    this.#ensureCollectionExists();
   }
 
   /**
@@ -57,7 +57,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    *
    * @returns A promise that resolves when the collection exists.
    */
-  private async ensureCollectionExists(): Promise<void> {
+  async #ensureCollectionExists(): Promise<void> {
     const maxRetries = 3;
     const baseDelay = 10;
 
@@ -93,7 +93,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @param id - The id of the document.
    * @returns The path to the document.
    */
-  private getDocumentPath(id: string): string {
+  #getDocumentPath(id: string): string {
     return path.join(this.#basePath, `${id}.json`);
   }
 
@@ -111,7 +111,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    */
   async create(data: CollectionParam<Collections, K>) {
     try {
-      await this.ensureCollectionExists();
+      await this.#ensureCollectionExists();
       await this.#metadata?.load();
 
       const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
@@ -153,7 +153,7 @@ export default class Collection<Collections, K extends keyof Collections> {
     if (cached) return cached;
 
     try {
-      const documentPath = this.getDocumentPath(id);
+      const documentPath = this.#getDocumentPath(id);
       const data = await readFile(documentPath, "utf-8");
       const document = parse(data) as Document<Collections, K>;
 
@@ -212,7 +212,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    */
   async has(id: string) {
     try {
-      await access(this.getDocumentPath(id));
+      await access(this.#getDocumentPath(id));
       return true;
     } catch {
       return false;
@@ -269,7 +269,7 @@ export default class Collection<Collections, K extends keyof Collections> {
    */
   async delete(id: string) {
     try {
-      const documentPath = this.getDocumentPath(id);
+      const documentPath = this.#getDocumentPath(id);
 
       if (!(await this.has(id))) {
         throw new DocumentNotFoundError(`Document: ${id} not found`);
