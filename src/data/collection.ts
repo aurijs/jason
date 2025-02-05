@@ -189,8 +189,6 @@ export default class Collection<Collections, K extends keyof Collections> {
       );
     }
 
-    result.sort((a, b) => a.id.localeCompare(b.id));
-
     let finalResult = result;
     const skip = options?.skip ?? 0;
     const limit = options?.limit;
@@ -327,8 +325,6 @@ export default class Collection<Collections, K extends keyof Collections> {
 
       results.push(...batchDocs.filter((d) => d && filter(d)));
     }
-
-    results.sort((a, b) => a.id.localeCompare(b.id));
 
     let finalResult = results;
     const skip = options.skip ?? 0;
