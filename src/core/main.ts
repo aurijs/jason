@@ -1,12 +1,9 @@
-import { EventEmitter } from "node:events";
 import { access, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import Collection from "../data/collection.js";
 import type {
   CollectionOptions,
-  Document,
-  Plugin,
-  PluginLifecycle,
+  Document
 } from "../types/index.js";
 
 export default class JasonDB<T> {
