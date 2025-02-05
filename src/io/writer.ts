@@ -10,7 +10,7 @@ interface FileState {
   nextReject: ((error: Error) => void) | null;
 }
 
-const TEMP_PREFIX = `.tmp_${process.pid}_`;
+const TEMP_PREFIX = `.tmp_`;
 
 function randomString() {
   return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
