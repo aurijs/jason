@@ -175,7 +175,15 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @returns A promise that resolves to an array of documents.
    */
   async readAll(options?: { skip?: number; limit?: number }) {
-    const files = await readdir(this.#basePath, { withFileTypes: true });
+    const files = (
+      await readdir(this.#basePath, { withFileTypes: true })
+    ).filter(
+      (file) =>
+        file.isFile() &&
+        !file.name.startsWith("_") &&
+        file.name.endsWith(".json")
+    );
+    
     const batchSize = 100;
 
     let result: Document<Collections, K>[] = [];
