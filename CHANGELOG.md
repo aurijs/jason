@@ -1,12 +1,26 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. Dates are displayed in UTC.
+All notable changes to this project will be documented in this file.
+
+## v1.5.3
+
+> 19/02/2025
+
+### Fixes
+
+- Made readAll() ignore _metadata file [`dc606a56`](https://github.com/realfakenerd/jason/commit/dc606a561138044b65b1da671d9a337069b46430)
+- Simplify temporary prefix in writer.ts [`bc7d72d2`](https://github.com/realfakenerd/jason/commit/bc7d72d27c7fc149457391b44141428461ca0726)
+- Resolve base path resolution issue in constructor [`3be37753`](https://github.com/realfakenerd/jason/commit/3be377530e65d174104080437e008ea03375f5f7)
+
+### Refactor
+
+- Remove unused imports in main.ts [`d84e60c6`](https://github.com/realfakenerd/jason/commit/d84e60c6f8d1753009e1c90b3ef18a8bf2183b47)
 
 ## v1.5.2
 
 > 05/02/2025
 
-- refactor: update method visibility to private in Collection class 🔒✨ [`93ccc040`](https://github.com/realfakenerd/jason/commit/93ccc0400de9c75282725e81a33fba91f9022fc1)
+- refactor: update method visibility to private in Collection class [`93ccc040`](https://github.com/realfakenerd/jason/commit/93ccc0400de9c75282725e81a33fba91f9022fc1)
 - fix: removed redundant sorting in Collection class [`068765ea`](https://github.com/realfakenerd/jason/commit/068765ea480ae9b3e2e5fac7306f1332498d05fc)
 
 ## v1.5.0
