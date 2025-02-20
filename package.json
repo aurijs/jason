@@ -1,14 +1,15 @@
 {
   "name": "@aurios/jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "scripts": {
     "build": "bun run tsc",
     "test": "vitest",
     "test:watch": "vitest watch",
     "test:coverage": "vitest --coverage",
     "clean": "rm -rf dist",
-    "prebuild": "bun run clean"
+    "prebuild": "bun run clean",
+    "prepublish": "bun run build"
   },
   "exports": {
     ".": {
@@ -25,7 +26,7 @@
   "author": {
     "name": "Lucas A. Ouverney",
     "url": "https://github.com/realfakenerd",
-    "email": "lucas210898.lao@gmail.com"
+    "email": "auri.js.dev@gmail.com"
   },
   "repository": {
     "type": "git",
