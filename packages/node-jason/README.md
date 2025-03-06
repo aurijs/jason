@@ -129,10 +129,9 @@ bun run build
 
 ## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the [MIT License](../LICENSE)
 
 ---
 
 ⭐ If this project helped you, consider giving it a star!
-
 📫 Questions? Open an issue or get in touch!
