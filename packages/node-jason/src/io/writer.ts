@@ -10,14 +10,12 @@ interface FileState {
 	nextReject: ((error: Error) => void) | null;
 }
 
-const TEMP_PREFIX = `.tmp_`;
-
 function randomString() {
 	return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
 }
 
 function getTempPath(path: string) {
-	return join(path, `${TEMP_PREFIX}_${randomString()}`);
+	return join(path, `$.tmp_${randomString()}`);
 }
 
 function getFilePath(basePath: string, fileName: string) {
@@ -43,6 +41,8 @@ export default class Writer {
 
 	async #write(filename: string, data: string) {
 		const queue = this.#queue;
+
+		// biome-ignore lint/style/noNonNullAssertion: ignored for now
 		const state = queue.get(filename)!;
 		state.locked = true;
 
@@ -66,7 +66,7 @@ export default class Writer {
 				state.nextPromise = null;
 				state.nextResolve = null;
 				state.nextReject = null;
-				this.#queue.delete(filename);
+				queue.delete(filename);
 			}
 		}
 	}
@@ -83,8 +83,10 @@ export default class Writer {
 	 * @returns A promise that resolves to true when the write operation is complete.
 	 */
 	async write(fileName: string, data: string) {
-		if (!this.#queue.has(fileName)) {
-			this.#queue.set(fileName, {
+		const queue = this.#queue;
+
+		if (!queue.has(fileName)) {
+			queue.set(fileName, {
 				locked: false,
 				nextData: null,
 				nextPromise: null,
@@ -93,7 +95,11 @@ export default class Writer {
 			});
 		}
 
-		const state = this.#queue.get(fileName)!;
+		const state = queue.get(fileName);
+
+		if (!state) {
+			throw new Error(`File state not found for ${fileName}`);
+		}
 
 		if (!state.locked) {
 			return this.#write(fileName, data);
