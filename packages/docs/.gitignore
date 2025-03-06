@@ -4,6 +4,7 @@
 *.log
 *.tgz
 .vite_opt_cache
+dist
 cache
 temp
 examples-temp

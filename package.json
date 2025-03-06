@@ -1,14 +1,16 @@
 {
   "name": "jason-monorepo",
   "version": "1.0.0",
-  "description": "monorepo for jasondb",
   "author": {
     "name": "Lucas Ouverney",
     "url": "https://ternary.vercel.app"
   },
+  "devDependencies": {
+    "turbo": "latest",
+    "@biomejs/biome": "1.9.4"
+  },
+  "description": "monorepo for jasondb",
   "packageManager": "bun@1.2.4",
-  "type": "module",
-  "workspaces": ["packages/*"],
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
@@ -17,8 +19,6 @@
     "dev": "turbo run dev --parallel",
     "clean": "turbo run clean"
   },
-  "devDependencies": {
-    "turbo": "latest",
-    "@biomejs/biome": "1.9.4"
-  }
+  "type": "module",
+  "workspaces": ["packages/*"]
 }

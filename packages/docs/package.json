@@ -1,0 +1,16 @@
+{
+  "name": "docs",
+  "version": "1.0.0",
+  "description": "Documentation site for jasondb",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "clean": "rimraf .vitepress/dist"
+  },
+  "devDependencies": {
+    "vitepress": "^1.0.0-rc.40",
+    "rimraf": "^5.0.5"
+  }
+}
