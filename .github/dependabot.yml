@@ -19,7 +19,7 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
-    directory: "/packages"
+    directory: "/packages/**"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
