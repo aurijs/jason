@@ -13,7 +13,7 @@ updates:
       prefix: "chore"
       include: "scope"
     reviewers:
-      - "realfakenerd" 
+      - "realfakenerd"
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
@@ -31,7 +31,7 @@ updates:
       prefix: "chore"
       include: "scope"
     reviewers:
-      - "realfakenerd" 
+      - "realfakenerd"
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
