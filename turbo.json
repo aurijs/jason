@@ -16,8 +16,10 @@
 			"cache": true
 		},
 		"dev": {
+			"dependsOn": ["^dev"],
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"outputs": [".next/**", "out/**"]
 		}
 	},
 	"globalDependencies": [

@@ -19,6 +19,11 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual Environments
 venv/
 .env/
 .venv/
@@ -34,6 +39,8 @@ out/
 build/
 coverage/
 *.tsbuildinfo
+pnpm-global/
+*.timestamp-*.mjs
 
 # IDE
 .vscode/
@@ -41,6 +48,7 @@ coverage/
 *.swp
 *.swo
 .vs/
+.vite_opt_cache
 
 # OS
 .DS_Store
@@ -58,16 +66,23 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Cache
 .cache/
 .parcel-cache/
 .npm/
 .eslintcache
+.stylelintcache
+cache/
 
 # Test coverage
 coverage/
 .nyc_output/
+.coverage
+htmlcov/
 
 # Build outputs
 dist/
@@ -78,3 +93,22 @@ build/
 *.tmp
 *.temp
 .temp/
+temp/
+examples-temp/
+
+# Package specific
+*.tgz
+.yarn-integrity
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+.idx
+benchmark/
+db/
+TODOs.md
+
+# Project specific
+/src/client/shared.ts
+/src/node/shared.ts

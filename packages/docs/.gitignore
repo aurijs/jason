@@ -1,0 +1,12 @@
+/coverage
+/src/client/shared.ts
+/src/node/shared.ts
+*.log
+*.tgz
+.vite_opt_cache
+cache
+temp
+examples-temp
+pnpm-global
+TODOs.md
+*.timestamp-*.mjs
