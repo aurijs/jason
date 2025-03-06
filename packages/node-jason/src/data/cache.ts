@@ -50,7 +50,8 @@ export default class Cache<T = BaseDocument> {
 	 */
 	update(id: string, value: T): void {
 		if (this.#data.has(id)) {
-			const entry = this.#data.get(id)!;
+			const entry = this.#data.get(id);
+			if (!entry) return;
 			entry.value = value;
 			entry.timestamp = this.#getNow();
 			this.#refresh(id);
