@@ -1,0 +1,64 @@
+{
+  "name": "@aurios/jason",
+  "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
+  "version": "1.5.4",
+  "scripts": {
+    "build": "bun run tsc",
+    "test": "vitest",
+    "lint": "biome check src --apply",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest --coverage",
+    "clean": "rm -rf dist",
+    "prebuild": "bun run clean",
+    "prepublish": "bun run build"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "author": {
+    "name": "Lucas A. Ouverney",
+    "url": "https://github.com/realfakenerd",
+    "email": "auri.js.dev@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aurijs/jason"
+  },
+  "bugs": {
+    "url": "https://github.com/aurijs/jason/issues"
+  },
+  "homepage": "https://github.com/aurijs/jason#readme",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "database",
+    "json",
+    "document-database",
+    "bun",
+    "typescript",
+    "lightweight"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@vitest/coverage-v8": "2.1.8",
+    "async-mutex": "^0.5.0",
+    "devalue": "^5.1.1",
+    "vitest": "^3.0.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

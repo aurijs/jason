@@ -1,0 +1,30 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**", "build/**", "target/**"],
+			"cache": true
+		},
+		"test": {
+			"dependsOn": ["build"],
+			"outputs": ["coverage/**", ".pytest_cache/**", "target/debug/deps/**"],
+			"cache": true
+		},
+		"lint": {
+			"outputs": [".mypy_cache/**", ".ruff_cache/**", "target/clippy/**"],
+			"cache": true
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true
+		}
+	},
+	"globalDependencies": [
+		"package.json",
+		"pyproject.toml",
+		"Cargo.toml",
+		"poetry.lock",
+		"turbo.json"
+	]
+}
