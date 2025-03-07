@@ -4,16 +4,25 @@ This page documents the Node.js implementation of JasonDB. The API is designed t
 
 ## Installation
 
-```bash
-npm install node-jason
+::: code-group
+
+```bash [npm]
+npm install @aurios/jason
 ```
 
-Or using Yarn:
-
-```bash
-yarn add node-jason
+```bash [yarn]
+yarn add @aurios/jason
 ```
 
+```bash [pnpm]
+pnpm add @aurios/jason
+```
+
+```bash [bun]
+bun add @aurios/jason
+```
+
+:::
 ## Importing
 
 ```js
