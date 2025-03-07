@@ -20,5 +20,5 @@
     "clean": "turbo run clean"
   },
   "type": "module",
-  "workspaces": ["packages/*"]
+  "workspaces": ["packages/*", "apps/*"]
 }

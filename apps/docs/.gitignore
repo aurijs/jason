@@ -11,3 +11,4 @@ examples-temp
 pnpm-global
 TODOs.md
 *.timestamp-*.mjs
+.vercel

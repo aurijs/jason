@@ -1,150 +1,12 @@
-# Node.js API Reference
+# Collection
 
-This page documents the Node.js implementation of JasonDB. The API is designed to be intuitive and easy to use, with support for both Promise-based and async/await programming styles.
+## Collection Methods
 
-## Installation
-
-```bash
-npm install node-jason
-```
-
-Or using Yarn:
-
-```bash
-yarn add node-jason
-```
-
-## Importing
-
-```javascript
-import { JasonDB } from 'node-jason';
-```
-
-Or using CommonJS:
-
-```javascript
-const { JasonDB } = require('node-jason');
-```
-
-## Database
-
-### Creating a Database Instance
-
-```javascript
-const db = new JasonDB(path, options);
-```
-
-**Parameters:**
-
-- `path` (string): The directory path where database files will be stored
-- `options` (object, optional): Configuration options
-  - `autoCreate` (boolean): Automatically create the directory if it doesn't exist (default: `true`)
-  - `compression` (boolean): Enable data compression (default: `false`)
-  - `serializationFormat` (string): Format for serializing data ('json' or 'bson', default: 'json')
-
-### Database Methods
-
-#### collection(name)
-
-Creates or retrieves a collection.
-
-```javascript
-const users = db.collection('users');
-```
-
-**Parameters:**
-
-- `name` (string): The name of the collection
-
-**Returns:** A Collection instance
-
-#### createCollection(name, options)
-
-Explicitly creates a new collection with options.
-
-```javascript
-const users = await db.createCollection('users', {
-  validator: { $jsonSchema: userSchema }
-});
-```
-
-**Parameters:**
-
-- `name` (string): The name of the collection
-- `options` (object, optional): Collection configuration
-  - `validator` (object): Schema validation rules
-  - `validationLevel` (string): When validation is applied ('strict' or 'moderate', default: 'strict')
-
-**Returns:** A Promise that resolves to a Collection instance
-
-#### dropCollection(name)
-
-Removes a collection and all its data.
-
-```javascript
-await db.dropCollection('users');
-```
-
-**Parameters:**
-
-- `name` (string): The name of the collection to drop
-
-**Returns:** A Promise that resolves to `true` if successful
-
-#### listCollections()
-
-Lists all collections in the database.
-
-```javascript
-const collections = await db.listCollections();
-console.log(collections); // ['users', 'products', ...]
-```
-
-**Returns:** A Promise that resolves to an array of collection names
-
-#### startSession()
-
-Starts a new session for transactions.
-
-```javascript
-const session = await db.startSession();
-```
-
-**Returns:** A Promise that resolves to a Session instance
-
-#### backup(path)
-
-Creates a backup of the database.
-
-```javascript
-await db.backup('./backups/mydb_backup');
-```
-
-**Parameters:**
-
-- `path` (string): The directory path where the backup will be stored
-
-**Returns:** A Promise that resolves when the backup is complete
-
-#### close()
-
-Closes the database connection and releases resources.
-
-```javascript
-await db.close();
-```
-
-**Returns:** A Promise that resolves when the database is closed
-
-## Collection
-
-### Collection Methods
-
-#### insert(document)
+### create(document)
 
 Inserts a single document into the collection.
 
-```javascript
+```js
 const newUser = await users.insert({
   name: 'John Doe',
   email: 'john@example.com',
@@ -160,36 +22,17 @@ const newUser = await users.insert({
 
 **Returns:** A Promise that resolves to the inserted document (with `_id`)
 
-#### insertMany(documents)
-
-Inserts multiple documents into the collection.
-
-```javascript
-const newUsers = await users.insertMany([
-  { name: 'Alice Smith', email: 'alice@example.com' },
-  { name: 'Bob Johnson', email: 'bob@example.com' }
-]);
-```
-
-**Parameters:**
-
-- `documents` (array): An array of documents to insert
-- `options` (object, optional): Insert options
-  - `session` (Session): Session for transaction support
-
-**Returns:** A Promise that resolves to an array of inserted documents
-
 #### find(query, options)
 
-Finds documents that match the query.
+Finds one document tha matchs the id.
 
-```javascript
-const results = await users.find({ age: { $gt: 25 } });
+```js
+const results = await users.find(id);
 ```
 
 **Parameters:**
 
-- `query` (object, optional): Query criteria (omit to find all documents)
+- `query` (string | number, required): Query criteria (omit to find all documents)
 - `options` (object, optional): Query options
   - `projection` (object): Fields to include or exclude
   - `sort` (object): Sort criteria
@@ -203,7 +46,7 @@ const results = await users.find({ age: { $gt: 25 } });
 
 Finds a single document that matches the query.
 
-```javascript
+```js
 const user = await users.findOne({ email: 'john@example.com' });
 ```
 
@@ -218,7 +61,7 @@ const user = await users.findOne({ email: 'john@example.com' });
 
 Updates a single document that matches the filter.
 
-```javascript
+```js
 const result = await users.update(
   { email: 'john@example.com' },
   { $set: { age: 31, lastUpdated: new Date() } }
@@ -240,7 +83,7 @@ const result = await users.update(
 
 Updates multiple documents that match the filter.
 
-```javascript
+```js
 const result = await users.updateMany(
   { age: { $lt: 30 } },
   { $set: { group: 'young' } }
@@ -259,7 +102,7 @@ const result = await users.updateMany(
 
 Deletes a single document that matches the filter.
 
-```javascript
+```js
 const result = await users.delete({ email: 'john@example.com' });
 ```
 
@@ -275,7 +118,7 @@ const result = await users.delete({ email: 'john@example.com' });
 
 Deletes multiple documents that match the filter.
 
-```javascript
+```js
 const result = await users.deleteMany({ inactive: true });
 ```
 
@@ -290,7 +133,7 @@ const result = await users.deleteMany({ inactive: true });
 
 Performs an aggregation pipeline operation.
 
-```javascript
+```js
 const results = await users.aggregate([
   { $match: { age: { $gt: 25 } } },
   { $group: { _id: '$department', avgAge: { $avg: '$age' } } },
@@ -310,7 +153,7 @@ const results = await users.aggregate([
 
 Counts documents that match the query.
 
-```javascript
+```js
 const count = await users.count({ age: { $gt: 30 } });
 ```
 
@@ -326,7 +169,7 @@ const count = await users.count({ age: { $gt: 30 } });
 
 Creates an index on the specified fields.
 
-```javascript
+```js
 await users.createIndex({ email: 1 }, { unique: true });
 ```
 
@@ -343,7 +186,7 @@ await users.createIndex({ email: 1 }, { unique: true });
 
 Drops the specified index.
 
-```javascript
+```js
 await users.dropIndex('email_1');
 ```
 
@@ -357,7 +200,7 @@ await users.dropIndex('email_1');
 
 Lists all indexes on the collection.
 
-```javascript
+```js
 const indexes = await users.listIndexes();
 ```
 
@@ -378,7 +221,7 @@ JasonDB supports a variety of query operators for constructing complex queries:
 - `$in`: In an array
 - `$nin`: Not in an array
 
-```javascript
+```js
 // Examples
 await users.find({ age: { $gt: 30 } });
 await users.find({ status: { $in: ['active', 'pending'] } });
@@ -391,7 +234,7 @@ await users.find({ status: { $in: ['active', 'pending'] } });
 - `$not`: Logical NOT
 - `$nor`: Logical NOR
 
-```javascript
+```js
 // Examples
 await users.find({
   $and: [
@@ -413,7 +256,7 @@ await users.find({
 - `$exists`: Field exists
 - `$type`: Field is of specified type
 
-```javascript
+```js
 // Examples
 await users.find({ phone: { $exists: true } });
 await users.find({ age: { $type: 'number' } });
@@ -425,7 +268,7 @@ await users.find({ age: { $type: 'number' } });
 - `$elemMatch`: Array contains an element matching all specified conditions
 - `$size`: Array has specified size
 
-```javascript
+```js
 // Examples
 await users.find({ tags: { $all: ['developer', 'javascript'] } });
 await users.find({ scores: { $elemMatch: { $gt: 80, $lt: 90 } } });
@@ -446,7 +289,7 @@ JasonDB supports various operators for updating documents:
 - `$min`: Updates if new value is less than current
 - `$max`: Updates if new value is greater than current
 
-```javascript
+```js
 // Examples
 await users.update(
   { _id: 'user123' },
@@ -465,7 +308,7 @@ await users.update(
 - `$addToSet`: Adds elements to an array if they don't exist
 - `$pop`: Removes first or last element of an array
 
-```javascript
+```js
 // Examples
 await users.update(
   { _id: 'user123' },
@@ -481,7 +324,7 @@ await users.update(
 
 JasonDB supports transactions for performing multiple operations atomically:
 
-```javascript
+```js
 const session = await db.startSession();
 
 try {
@@ -506,7 +349,7 @@ try {
 
 JasonDB collections emit events that you can listen to:
 
-```javascript
+```js
 // Listen for document insertions
 users.on('insert', (document) => {
   console.log('Document inserted:', document);

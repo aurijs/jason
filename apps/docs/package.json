@@ -7,7 +7,9 @@
     "dev": "vitepress dev",
     "build": "vitepress build",
     "preview": "vitepress preview",
-    "clean": "rimraf .vitepress/dist"
+    "clean": "rimraf .vitepress/dist",
+    "vercel-build": "npm run clean && npm run build",
+    "deploy": "vercel -y"
   },
   "devDependencies": {
     "vitepress": "^1.0.0-rc.40",
