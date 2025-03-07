@@ -1,6 +1,6 @@
 # Advanced Usage
 
-This guide covers more advanced features and usage patterns for JasonDB. Once you're comfortable with the [basic operations](/guide/basic-operations), these advanced techniques will help you get the most out of JasonDB.
+This guide covers more advanced features and usage patterns for JasonDB. Once you're comfortable with the [basic operations](/guide/basic-operations/), these advanced techniques will help you get the most out of JasonDB.
 
 ## Indexing
 

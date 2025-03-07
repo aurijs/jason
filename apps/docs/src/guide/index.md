@@ -34,4 +34,4 @@ JasonDB is particularly well-suited for:
 - Projects that need a simple, file-based database without complex setup
 - Cross-platform applications using both Node.js and Python
 
-Ready to get started? Check out the [Installation](/guide/installation) guide to set up JasonDB in your project.
+Ready to get started? Check out the [Installation](/guide/installation/) guide to set up JasonDB in your project.

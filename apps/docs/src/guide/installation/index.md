@@ -94,8 +94,8 @@ If everything is working correctly, you should see the success messages in your 
 
 Now that you have JasonDB installed, you can:
 
-- Learn about [Basic Operations](/guide/basic-operations) to start working with your data
+- Learn about [Basic Operations](/guide/basic-operations/) to start working with your data
 - Check out the [API Reference](/api/) for detailed documentation
-- Explore [Advanced Usage](/guide/advanced-usage) for more complex scenarios
+- Explore [Advanced Usage](/guide/advanced-usage/) for more complex scenarios
 
 If you encounter any issues during installation, please check the [GitHub repository](https://github.com/lucas-augusto/jason) for troubleshooting or to report a bug.

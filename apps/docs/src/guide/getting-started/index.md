@@ -144,8 +144,8 @@ if __name__ == '__main__':
 
 Now that you've seen the basics of JasonDB, you can:
 
-1. Check out the [Installation](/guide/installation) page for more detailed setup instructions
-2. Learn about [Basic Operations](/guide/basic-operations) for more examples
-3. Explore [Advanced Usage](/guide/advanced-usage) for more complex scenarios
+1. Check out the [Installation](/guide/installation/) page for more detailed setup instructions
+2. Learn about [Basic Operations](/guide/basic-operations/) for more examples
+3. Explore [Advanced Usage](/guide/advanced-usage/) for more complex scenarios
 
 JasonDB is designed to be intuitive and easy to use, so feel free to experiment with it in your projects. The API is consistent across both Node.js and Python platforms, making it easy to switch between environments as needed.

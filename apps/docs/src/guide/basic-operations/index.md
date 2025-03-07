@@ -288,7 +288,7 @@ print(f'Deleted count: {result["deleted_count"]}')
 
 Now that you understand the basic operations in JasonDB, you can:
 
-- Explore [Advanced Usage](/guide/advanced-usage) for more complex scenarios
+- Explore [Advanced Usage](/guide/advanced-usage/) for more complex scenarios
 - Check out the [API Reference](/api/) for detailed documentation
 
 If you have any questions or encounter issues, please refer to the [GitHub repository](https://github.com/lucas-augusto/jason) for support.
