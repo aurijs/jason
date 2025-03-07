@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.5.5
+
+> 07/03/2025
+
+### Fixes
+
+- Improved limit and skip logic in readAll() method [`10a02b7e`](https://github.com/realfakenerd/jason/commit/10a02b7e306caa4a13eaeef8d79ad491e194528f)
+
 ## v1.5.3
 
 > 19/02/2025
