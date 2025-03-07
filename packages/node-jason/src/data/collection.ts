@@ -206,10 +206,23 @@ export default class Collection<Collections, K extends keyof Collections> {
 		);
 
 		const batchSize = 100;
+		const skip = options?.skip ?? 0;
+		const limit = options?.limit;
+
+		const effectiveLimit =
+			limit !== undefined ? skip + limit : Number.POSITIVE_INFINITY;
 
 		let result: Document<Collections, K>[] = [];
-		for (let i = 0; i < files.length; i += batchSize) {
-			const batch = files.slice(i, i + batchSize);
+		for (
+			let i = 0;
+			i < files.length && result.length < effectiveLimit;
+			i += batchSize
+		) {
+			const remaining = effectiveLimit - result.length;
+
+			const currentBatchSize = Math.min(batchSize, remaining);
+			const batch = files.slice(i, i + currentBatchSize);
+
 			const batchResults = await Promise.all(
 				batch.map((file) => this.read(file.name.replace(".json", ""))),
 			);
@@ -218,19 +231,7 @@ export default class Collection<Collections, K extends keyof Collections> {
 			);
 		}
 
-		let finalResult = result;
-		const skip = options?.skip ?? 0;
-		const limit = options?.limit;
-
-		if (skip > 0) {
-			finalResult = finalResult.slice(skip);
-		}
-
-		if (limit && limit >= 0) {
-			finalResult = finalResult.slice(0, limit);
-		}
-
-		return finalResult;
+		return result;
 	}
 
 	/**
