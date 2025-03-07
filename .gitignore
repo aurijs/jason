@@ -112,3 +112,4 @@ TODOs.md
 # Project specific
 /src/client/shared.ts
 /src/node/shared.ts
+.vercel

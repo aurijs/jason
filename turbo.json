@@ -1,6 +1,11 @@
 {
 	"$schema": "https://turbo.build/schema.json",
 	"tasks": {
+		"docs#build": {
+			"outputs": [".vitepress/dist"],
+			"cache": true,
+			"dependsOn": []
+		},
 		"build": {
 			"dependsOn": ["^build"],
 			"outputs": ["dist/**", "build/**", "target/**"],
@@ -19,7 +24,7 @@
 			"dependsOn": ["^dev"],
 			"cache": false,
 			"persistent": true,
-			"outputs": [".next/**", "out/**"]
+			"interactive": true
 		}
 	},
 	"globalDependencies": [
