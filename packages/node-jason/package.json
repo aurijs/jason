@@ -31,7 +31,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/aurijs/jason"
+    "url": "git+https://github.com/aurijs/jason.git"
   },
   "bugs": {
     "url": "https://github.com/aurijs/jason/issues"
