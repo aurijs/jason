@@ -1,24 +1,64 @@
 {
-  "name": "jason-monorepo",
-  "version": "1.0.0",
-  "author": {
-    "name": "Lucas Ouverney",
-    "url": "https://ternary.vercel.app"
-  },
-  "devDependencies": {
-    "turbo": "latest",
-    "@biomejs/biome": "1.9.4"
-  },
-  "description": "monorepo for jasondb",
-  "packageManager": "bun@1.2.4",
+  "name": "@aurios/jason",
+  "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
+  "version": "1.5.5",
   "scripts": {
-    "build": "turbo run build",
-    "test": "turbo run test",
-    "lint": "turbo run lint",
-    "format": "biome check --apply",
-    "dev": "turbo run dev --parallel",
-    "clean": "turbo run clean"
+    "build": "bun run tsc",
+    "test": "vitest",
+    "lint": "biome check src --apply",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest --coverage",
+    "clean": "rm -rf dist",
+    "prebuild": "bun run clean",
+    "prepublish": "bun run build"
   },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "author": {
+    "name": "Lucas A. Ouverney",
+    "url": "https://github.com/realfakenerd",
+    "email": "auri.js.dev@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aurijs/jason.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aurijs/jason/issues"
+  },
+  "homepage": "https://github.com/aurijs/jason#readme",
   "type": "module",
-  "workspaces": ["packages/*"]
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "database",
+    "json",
+    "document-database",
+    "bun",
+    "typescript",
+    "lightweight"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@vitest/coverage-v8": "2.1.9",
+    "async-mutex": "^0.5.0",
+    "devalue": "^5.1.1",
+    "vitest": "^3.0.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.2"
+  }
 }
