@@ -10,7 +10,6 @@ import type {
 	Document,
 	ValidationFunction,
 } from "../types/index.js";
-import { BTreeIndex, type BTreeOptions } from "./btree.js";
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
 
@@ -20,7 +19,6 @@ export default class Collection<Collections, K extends keyof Collections> {
 	#metadata: Metadata | null;
 	#cache: Cache<Document<Collections, K>>;
 	#writer: Writer;
-	#indexes: Map<string, BTreeIndex> = new Map();
 
 	/**
 	 * Constructs a new Collection.
@@ -87,35 +85,6 @@ export default class Collection<Collections, K extends keyof Collections> {
 	 */
 	#getDocumentPath(id: string): string {
 		return path.join(this.#basePath, `${id}.json`);
-	}
-
-	async createIndex(
-		field: string,
-		options: BTreeOptions & { rebuild?: boolean } = {},
-	) {
-		const index = new BTreeIndex({
-			order: options.order,
-			unique: options.unique,
-			keyParser: (key) => {
-				if (key === undefined) {
-					throw new Error(`Field ${field} is required for indexing`);
-				}
-				return key as KeyType;
-			},
-		});
-
-		if (options.rebuild || !this.#indexes.has(field)) {
-			const files = await readdir(this.#basePath);
-			for (const file of files) {
-				const doc = await this.read(path.join(this.#basePath, file));
-				if (doc) {
-					// @ts-expect-error error is expected here
-					index.insert(doc[field], doc.id);
-				}
-			}
-		}
-
-		this.#indexes.set(field, index);
 	}
 
 	/**
