@@ -11,13 +11,27 @@ export default class JasonDB<T> {
   #basePath: string;
   #collections = new Map<keyof T, Collection<T, keyof T>>();
 
+  /**
+   * Creates a new JasonDB instance with the given configuration.
+   * @param options - Either a string representing the database name (will be created in current working directory),
+   *                 or a JasonDBOptions configuration object
+   * @example
+   * // Simple usage
+   * const db = new JasonDB('my-database');
+   * 
+   * // Advanced usage
+   * const db = new JasonDB({
+   *   basename: 'my-database',
+   *   path: './custom-location'
+   * });
+   */
   constructor(options: string | JasonDBOptions) {
     if (typeof options === "string") {
       const cwd = path.resolve(".");
-      this.#basePath = path.join(cwd, `${options}`);
+      this.#basePath = path.join(cwd, options);
     } else {
-		const cdw = path.resolve(options.path);
-	
+		const cwd = path.resolve(options.path);
+    this.#basePath = path.join(cwd, options.basename);
 	}
 
     this.#ensureDataDirExists();
