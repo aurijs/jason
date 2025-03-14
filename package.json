@@ -1,7 +1,7 @@
 {
   "name": "@aurios/jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
-  "version": "1.5.5",
+  "version": "1.6.5",
   "scripts": {
     "build": "bun run tsc",
     "test": "vitest",
@@ -10,7 +10,8 @@
     "test:coverage": "vitest --coverage",
     "clean": "rm -rf dist",
     "prebuild": "bun run clean",
-    "prepublish": "bun run build"
+    "prepublish": "bun run build",
+    "version": "conventional-changelog -p jquery -i CHANGELOG.md -s"
   },
   "exports": {
     ".": {
