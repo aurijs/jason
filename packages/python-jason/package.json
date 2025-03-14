@@ -1,7 +1,0 @@
-{
-  "name": "python-jason",
-  "scripts": {
-    "build": "uv build",
-    "lint": "uvx ruff check"
-  }
-}
