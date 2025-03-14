@@ -10,6 +10,7 @@
     "test:coverage": "vitest --coverage",
     "clean": "rm -rf dist",
     "prebuild": "bun run clean",
+    "publish": "npm publish",
     "prepublish": "bun run build",
     "version": "conventional-changelog -p jquery -i CHANGELOG.md -s"
   },
