@@ -6,7 +6,6 @@ import Writer from "../io/writer.js";
 import type { CollectionMetadata } from "../types/index.js";
 
 const MAX_METADATA_SIZE = 1024 * 10;
-const METADATA_PARSE_TIMEOUT = 500;
 
 export default class Metadata {
 	#metadataPath: string;
