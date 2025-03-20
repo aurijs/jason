@@ -12,8 +12,8 @@ export default class Cache<T = BaseDocument> {
 	#maxSize: number;
 	#cleanupTimer: NodeJS.Timeout | Timer;
 
-	constructor(cacheTimout = 60_000, maxSize = 1000) {
-		this.#timeout = cacheTimout;
+	constructor(cacheTimeout = 60_000, maxSize = 1000) {
+		this.#timeout = cacheTimeout;
 		this.#maxSize = maxSize;
 		this.#cleanupTimer = setInterval(
 			() => this.#cleanup(),
