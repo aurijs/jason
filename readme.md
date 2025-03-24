@@ -33,7 +33,7 @@ bun add -D jason
 
 # or
 
-npm install -D jason
+npm i @aurios/jason
 ```
 
 ## 💻 Quick Example
