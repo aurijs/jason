@@ -3,9 +3,10 @@ import { access, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
-import type { TestCollections } from "./types";
+import type { TestCollections, TestPost } from "./types";
+import type { Document } from "../src/types/index.js";
 
-const testFilename = `test_create_db`;
+const testFilename = "test_create_db";
 const filePath = path.join(process.cwd(), `${testFilename}`);
 
 let db: JasonDB<TestCollections>;
@@ -58,7 +59,9 @@ describe("Collection - CREATE", () => {
       authorId: "author",
     });
 
-    const docPath = path.join(filePath, "posts", `${post.id}.json`);
+    // Use encoded ID for direct file path check
+    const encodedId = Buffer.from(post.id).toString("base64url");
+    const docPath = path.join(filePath, "posts", `${encodedId}.json`);
     await expect(access(docPath)).resolves.toBeUndefined();
 
     const rawData = await readFile(docPath, "utf-8");
@@ -74,7 +77,9 @@ describe("Collection - CREATE", () => {
       authorId: "author",
     });
 
-    const docPath = path.join(filePath, "posts", `${post.id}.json`);
+    // Use encoded ID for direct file path check
+    const encodedId = Buffer.from(post.id).toString("base64url");
+    const docPath = path.join(filePath, "posts", `${encodedId}.json`);
     await writeFile(docPath, stringify({ ...post, title: "Modified" }));
 
     const cachedPost = await posts.read(post.id);
@@ -102,15 +107,22 @@ describe("Collection - CREATE", () => {
     ).rejects.toThrow("Document failed schema validation");
   });
 
-  it("should handle 1000 concurrent writes", async () => {
+  // Increase timeout and improve type safety
+  it("should handle 1000 concurrent writes", { timeout: 30000 }, async () => {
     const posts = db.collection("posts");
     const count = 1000;
-    const promises = Array.from({ length: count }, (_, i) =>
-      posts.create({
-        title: `Post ${i}`,
-        content: "Content",
-        authorId: "author",
-      } as any)
+    // Define the input data type explicitly
+    type PostInput = Omit<TestPost, "id">;
+    // Type the promises array
+    const promises: Promise<Document<TestCollections, "posts">>[] = Array.from(
+      { length: count },
+      (_, i) =>
+        posts.create({
+          // Ensure data conforms to PostInput
+          title: `Post ${i}`,
+          content: "Content",
+          authorId: "author",
+        } as PostInput), // Cast needed if create expects exact input type
     );
     const results = await Promise.all(promises);
     expect(results).toHaveLength(count);

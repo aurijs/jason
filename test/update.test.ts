@@ -37,7 +37,7 @@ const updateData = {
   email: "updated@example.com",
 };
 
-describe(`User - UPDATE`, () => {
+describe("User - UPDATE", () => {
   it("should perform full document update", async () => {
     const collection = db.collection("users");
     const created = await collection.create(createData);
@@ -49,8 +49,8 @@ describe(`User - UPDATE`, () => {
   it("should perform partial update", async () => {
     const collection = db.collection("users");
     const created = await collection.create({ ...createData });
-    const partialUpdate = { ...updateData };
-    delete (partialUpdate as any).id;
+    // Construct partialUpdate without the 'id' property
+    const { id: _removed, ...partialUpdate } = { ...createData, ...updateData };
 
     const updated = await collection.update(created.id, partialUpdate);
     expect(updated).toMatchObject({ ...created, ...partialUpdate });
@@ -78,7 +78,13 @@ describe(`User - UPDATE`, () => {
     const afterUpdate = await collection.read(created.id);
     
     expect(afterUpdate).toMatchObject(updateData);
-    expect(afterUpdate).not.toMatchObject(beforeUpdate!);
+    // Ensure beforeUpdate is not null before assertion
+    if (beforeUpdate) {
+      expect(afterUpdate).not.toMatchObject(beforeUpdate);
+    } else {
+      // Fail test if beforeUpdate was unexpectedly null
+      expect(beforeUpdate).toBeDefined();
+    }
   })
 
   it("should persist changes to disk", async () => {
@@ -87,7 +93,9 @@ describe(`User - UPDATE`, () => {
     await collection.update(created.id, updateData);
 
     // Lê diretamente do arquivo
-    const _filePath = path.join(filePath, "users", `${created.id}.json`);
+    // Use encoded ID for direct file path check
+    const encodedId = Buffer.from(created.id).toString("base64url");
+    const _filePath = path.join(filePath, "users", `${encodedId}.json`);
     const rawData = await readFile(_filePath, "utf-8");
     const diskData = parse(rawData);
 

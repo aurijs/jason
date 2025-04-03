@@ -27,7 +27,7 @@ interface Order {
   total: number;
 }
 
-interface Log {
+export interface Log {
   id: string;
   message?: string;
   severity?: string;
