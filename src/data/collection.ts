@@ -83,8 +83,18 @@ export default class Collection<Collections, K extends keyof Collections> {
 	 * @param id - The id of the document.
 	 * @returns The path to the document.
 	 */
+	#encodeId(id: string): string {
+		return Buffer.from(id).toString("base64url");
+	}
+
+	#decodeId(encodedId: string): string {
+		return Buffer.from(encodedId, "base64url").toString("utf-8");
+	}
+
 	#getDocumentPath(id: string): string {
-		return path.join(this.#basePath, `${id}.json`);
+		// Encode the ID to make it filesystem-safe
+		const encodedId = this.#encodeId(id);
+		return path.join(this.#basePath, `${encodedId}.json`);
 	}
 
 	/**
@@ -112,7 +122,8 @@ export default class Collection<Collections, K extends keyof Collections> {
 			}
 
 			await Promise.all([
-				this.#writer.write(id, stringify(document)),
+				// Use encoded ID for the writer filename
+				this.#writer.write(this.#encodeId(id), stringify(document)),
 				this.#metadata?.incrementDocumentCount(),
 			]);
 
@@ -143,10 +154,14 @@ export default class Collection<Collections, K extends keyof Collections> {
 		if (cached) return cached;
 
 		try {
+			// Read file using encoded ID
 			const documentPath = this.#getDocumentPath(id);
 			const data = await readFile(documentPath, "utf-8");
 			const document = parse(data) as Document<Collections, K>;
 
+			if (document.id !== id) {
+				return null;
+			}
 			this.#cache.update(id, document);
 			return document;
 		} catch {
@@ -165,42 +180,39 @@ export default class Collection<Collections, K extends keyof Collections> {
 	 * @returns A promise that resolves to an array of documents.
 	 */
 	async readAll(options?: { skip?: number; limit?: number }) {
-		const files = (
-			await readdir(this.#basePath, { withFileTypes: true })
-		).filter(
-			(file) =>
-				file.isFile() &&
-				!file.name.startsWith("_") &&
-				file.name.endsWith(".json"),
-		);
+		const files = (await readdir(this.#basePath, { withFileTypes: true }))
+			.filter(
+				(file) =>
+					file.isFile() &&
+					!file.name.startsWith("_") && // Ignore metadata/temp files
+					file.name.endsWith(".json"),
+			)
+			.map((file) => file.name) // Get only names
+			.sort(); // Sort filenames for deterministic order
 
-		const batchSize = 100;
 		const skip = options?.skip ?? 0;
-		const limit = options?.limit;
+		const limit = options?.limit ?? Number.POSITIVE_INFINITY;
 
-		const effectiveLimit =
-			limit !== undefined ? skip + limit : Number.POSITIVE_INFINITY;
+		// Read all relevant files first
+		const allDocs = (
+			await Promise.all(
+				files.map((fileName) => {
+					// Decode the filename (without .json) back to the original ID
+					const originalId = this.#decodeId(fileName.replace(".json", ""));
+					return this.read(originalId);
+				}),
+			)
+		).filter(Boolean) as Document<Collections, K>[];
 
-		let result: Document<Collections, K>[] = [];
-		for (
-			let i = 0;
-			i < files.length && result.length < effectiveLimit;
-			i += batchSize
-		) {
-			const remaining = effectiveLimit - result.length;
-
-			const currentBatchSize = Math.min(batchSize, remaining);
-			const batch = files.slice(i, i + currentBatchSize);
-
-			const batchResults = await Promise.all(
-				batch.map((file) => this.read(file.name.replace(".json", ""))),
-			);
-			result = result.concat(
-				batchResults.filter(Boolean) as Document<Collections, K>[],
-			);
+		let finalResult = allDocs;
+		if (skip > 0) {
+			finalResult = finalResult.slice(skip);
 		}
 
-		return result;
+		if (limit !== Number.POSITIVE_INFINITY) {
+			finalResult = finalResult.slice(0, limit);
+		}
+		return finalResult;
 	}
 
 	/**
@@ -249,7 +261,8 @@ export default class Collection<Collections, K extends keyof Collections> {
 			throw new Error("Document failed schema validation");
 		}
 
-		await this.#writer.write(id, stringify(updated));
+		// Use encoded ID for the writer filename
+		await this.#writer.write(this.#encodeId(id), stringify(updated));
 		await this.#metadata?.updateLastModified();
 		this.#cache.update(id, updated);
 
@@ -274,7 +287,7 @@ export default class Collection<Collections, K extends keyof Collections> {
 				throw new DocumentNotFoundError(`Document: ${id} not found`);
 			}
 
-			unlink(documentPath);
+			await unlink(documentPath);
 			this.#metadata?.decrementDocumentCount();
 			this.#cache.delete(id);
 
@@ -310,19 +323,37 @@ export default class Collection<Collections, K extends keyof Collections> {
 		} = {},
 	) {
 		const files = await readdir(this.#basePath, { withFileTypes: true });
-		const jsonFiles = files
-			.filter((file) => file.isFile() && file.name.endsWith(".json"))
+		const allJsonFiles = files
+			.filter(
+				(file) =>
+					file.isFile() &&
+					!file.name.startsWith("_") && // Ignore metadata/temp files
+					file.name.endsWith(".json"),
+			)
 			.map((file) => file.name);
 
 		const results: Document<Collections, K>[] = [];
 		const batchSize = options.batchSize ?? 100;
-		for (let i = 0; i < jsonFiles.length; i += batchSize) {
-			const batch = jsonFiles.slice(i, i + batchSize);
-			const batchDocs = (await Promise.all(
-				batch.map((name) => this.read(name.replace(".json", ""))),
-			)) as Document<Collections, K>[];
+		// Process files in batches
+		for (let i = 0; i < allJsonFiles.length; i += batchSize) {
+			const batchFileNames = allJsonFiles.slice(i, i + batchSize);
+			const batchDocs = (
+				await Promise.all(
+					batchFileNames.map((fileName) => {
+						// Decode filename back to ID for read
+						const originalId = this.#decodeId(fileName.replace(".json", ""));
+						return this.read(originalId);
+					}),
+				)
+			).filter(Boolean) as Document<Collections, K>[]; // Filter nulls early
 
-			results.push(...batchDocs.filter((d) => d && filter(d)));
+			// Apply user filter to the valid documents in the batch
+			results.push(...batchDocs.filter(filter));
+
+			// Early exit if limit (applied later) is already reached
+			if (options.limit && results.length >= (options.skip ?? 0) + options.limit) {
+				break;
+			}
 		}
 
 		let finalResult = results;
@@ -330,7 +361,7 @@ export default class Collection<Collections, K extends keyof Collections> {
 		const limit = options.limit;
 
 		if (skip > 0) {
-			finalResult = results.slice(skip);
+			finalResult = finalResult.slice(skip);
 		}
 
 		if (limit && limit >= 0) {
@@ -338,5 +369,38 @@ export default class Collection<Collections, K extends keyof Collections> {
 		}
 
 		return finalResult;
+	}
+
+	/**
+		* Executes a provided function once for each collection element.
+		*
+		* Iterates through all documents in the collection and executes the callback
+		* function for each one, passing the document, its ID, and the collection
+		* instance. Handles both synchronous and asynchronous callbacks sequentially.
+		*
+		* @param callback - Function to execute for each element, accepting three arguments:
+		*   - `value`: The current document being processed.
+		*   - `id`: The ID of the current document being processed.
+		*   - `collection`: The collection instance `forEach` was called upon.
+		* @returns A promise that resolves when all callbacks have been executed.
+		*/
+	async forEach(
+		callback: (
+			value: Document<Collections, K>,
+			id: string,
+			collection: this,
+		) => void | Promise<void>,
+	): Promise<void> {
+		// Fetch all documents first. readAll handles batching internally.
+		const documents = await this.readAll();
+
+		// Iterate sequentially, awaiting async callbacks
+		for (const doc of documents) {
+			// Add null check to satisfy TypeScript, although readAll filters nulls
+			if (doc) {
+				// The id is guaranteed to be present on the Document type.
+				await callback(doc, doc.id, this);
+			}
+		}
 	}
 }
