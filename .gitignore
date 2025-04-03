@@ -23,6 +23,8 @@ wheels/
 .mypy_cache/
 .ruff_cache/
 
+.roomodes
+
 # Virtual Environments
 venv/
 .env/
