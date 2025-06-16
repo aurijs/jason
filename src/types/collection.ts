@@ -52,5 +52,6 @@ export interface CollectionOptions<T = BaseDocument> {
   initialData?: T[];
   schema?: ValidationFunction<T>;
   cacheTimeout?: number;
+  cacheEvictionStrategy?: 'lru' | 'lfu'; // Adicionado para configurar a estratégia de evicção do cache
   generateMetadata?: boolean;
 }
