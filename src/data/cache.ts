@@ -3,18 +3,28 @@ import type { BaseDocument } from "../types/index.js";
 interface CacheEntry<T> {
 	value: T;
 	timestamp: number;
+	frequency?: number; // Para LFU
 }
+
+export type EvictionStrategy = "lru" | "lfu";
 
 export default class Cache<T = BaseDocument> {
 	#data = new Map<string, CacheEntry<T>>();
-	#queue: string[] = [];
+	#queue: string[] = []; // Usado para LRU
 	#timeout = 60000;
 	#maxSize: number;
 	#cleanupTimer: NodeJS.Timeout | Timer;
+	#evictionStrategy: EvictionStrategy;
 
-	constructor(cacheTimeout = 60_000, maxSize = 1000) {
+	constructor(
+		cacheTimeout = 60_000,
+		maxSize = 1000,
+		evictionStrategy: EvictionStrategy = "lru", // Padrão para LRU
+	) {
 		this.#timeout = cacheTimeout;
 		this.#maxSize = maxSize;
+		this.#evictionStrategy = evictionStrategy;
+
 		this.#cleanupTimer = setInterval(
 			() => this.#cleanup(),
 			Math.min(30_000, this.#timeout),
@@ -49,19 +59,34 @@ export default class Cache<T = BaseDocument> {
 	 * @param value - The value of the item to be updated.
 	 */
 	update(id: string, value: T): void {
-		if (this.#data.has(id)) {
-			const entry = this.#data.get(id);
-			if (!entry) return;
+		const now = this.#getNow();
+		let entry = this.#data.get(id);
+
+		if (entry) { // Item existe
 			entry.value = value;
-			entry.timestamp = this.#getNow();
-			this.#refresh(id);
-		} else {
+			entry.timestamp = now;
+			this.#refresh(id, entry); // Passa a entrada para LFU
+		} else { // Novo item
 			if (this.#data.size >= this.#maxSize) {
-				this.#evict(Math.floor(this.#maxSize * 0.1));
+				// Evict antes de adicionar para criar espaço, garantindo que pelo menos 1 seja removido se maxSize >= 1
+				this.#evict(Math.max(1, Math.floor(this.#maxSize * 0.1)));
 			}
 
-			this.#data.set(id, { value, timestamp: this.#getNow() });
-			this.#queue.push(id);
+			// Adiciona somente se houver espaço ou se maxSize for 0 (ilimitado)
+			if (this.#data.size < this.#maxSize || this.#maxSize === 0) {
+				const newEntry: CacheEntry<T> = { value, timestamp: now };
+				if (this.#evictionStrategy === "lfu") {
+					newEntry.frequency = 1;
+				}
+				this.#data.set(id, newEntry);
+				if (this.#evictionStrategy === "lru") {
+					this.#queue.push(id); // Adiciona à fila LRU apenas se for um novo item
+				}
+			} else {
+				// O cache está cheio e não foi possível liberar espaço.
+				// Isso pode acontecer se maxSize for muito pequeno e a lógica de evicção falhar.
+				console.warn(`Cache está cheio (maxSize: ${this.#maxSize}), não foi possível adicionar o item '${id}'.`);
+			}
 		}
 	}
 
@@ -80,11 +105,11 @@ export default class Cache<T = BaseDocument> {
 
 		const now = this.#getNow();
 		if (now - entry.timestamp > this.#timeout) {
-			this.#data.delete(id);
+			this.delete(id); // Usa delete para também lidar com a fila
 			return null;
 		}
 
-		this.#refresh(id);
+		this.#refresh(id, entry); // Passa a entrada para LFU
 		return entry.value;
 	}
 
@@ -94,7 +119,13 @@ export default class Cache<T = BaseDocument> {
 	 * @param id - The id of the item to be removed from the cache.
 	 */
 	delete(id: string): void {
-		this.#data.delete(id);
+		const existed = this.#data.delete(id);
+		if (existed && this.#evictionStrategy === "lru") { // Só modifica a fila se for LRU e o item existia
+			const idx = this.#queue.indexOf(id);
+			if (idx > -1) {
+				this.#queue.splice(idx, 1);
+			}
+		}
 	}
 
 	/**
@@ -106,19 +137,47 @@ export default class Cache<T = BaseDocument> {
 		clearInterval(this.#cleanupTimer);
 	}
 
-	#refresh(id: string) {
-		const idx = this.#queue.indexOf(id);
-		if (idx > -1) {
-			this.#queue.splice(idx, 1);
+	#refresh(id: string, entry: CacheEntry<T>): void {
+		if (this.#evictionStrategy === "lru") {
+			const idx = this.#queue.indexOf(id);
+			if (idx > -1) {
+				this.#queue.splice(idx, 1);
+			}
+			this.#queue.push(id);
+		} else if (this.#evictionStrategy === "lfu") {
+			entry.frequency = (entry.frequency || 0) + 1;
 		}
-
-		this.#queue.push(id);
 	}
 
 	#evict(count: number) {
-		const victims = this.#queue.splice(0, count);
-		for (const id of victims) {
-			this.#data.delete(id);
+		if (count <= 0 || this.#data.size === 0) return;
+
+		let victims: string[];
+
+		if (this.#evictionStrategy === "lru") {
+			const numToEvict = Math.min(count, this.#queue.length);
+			victims = this.#queue.splice(0, numToEvict);
+			for (const id of victims) {
+				this.#data.delete(id); // Apenas remove do #data, #queue já foi tratada
+			}
+		} else { // LFU
+			// LFU simples: ordena todos os itens por frequência (e timestamp como desempate).
+			// Isso não é o mais performático para caches grandes; uma min-heap seria melhor.
+			const sortedByFrequency = Array.from(this.#data.entries())
+				.sort(([, entryA], [, entryB]) => {
+					const freqA = entryA.frequency || 0;
+					const freqB = entryB.frequency || 0;
+					if (freqA !== freqB) {
+						return freqA - freqB;
+					}
+					return entryA.timestamp - entryB.timestamp; // Mais antigo se mesma frequência
+				});
+			
+			const numToEvict = Math.min(count, sortedByFrequency.length);
+			victims = sortedByFrequency.slice(0, numToEvict).map(([id]) => id);
+			for (const id of victims) {
+				this.#data.delete(id); // Para LFU, a #queue não é usada para evicção primária
+			}
 		}
 	}
 
@@ -126,11 +185,38 @@ export default class Cache<T = BaseDocument> {
 		const now = this.#getNow();
 		const threshold = now - this.#timeout;
 
-		for (const [id, entry] of this.#data) {
-			if (entry.timestamp < threshold) {
-				this.#data.delete(id);
+		// Itera sobre uma cópia das chaves para evitar problemas de modificação durante a iteração
+		const currentKeys = Array.from(this.#data.keys());
+
+		for (const id of currentKeys) {
+			const entry = this.#data.get(id);
+			// Verifica se a entrada ainda existe, pois pode ter sido deletada por outra operação
+			if (entry && entry.timestamp < threshold) {
+				this.delete(id); // Usa o método delete da classe
 			}
 		}
+	}
+
+	/**
+	 * Invalida entradas do cache com base em um predicado.
+	 * @param predicate Uma função que recebe o valor do cache e seu id, e retorna true se a entrada deve ser invalidada.
+	 * @returns O número de itens invalidados.
+	 */
+	public invalidateWhere(predicate: (value: T, id: string) => boolean): number {
+		let invalidatedCount = 0;
+		const idsToInvalidate: string[] = [];
+
+		for (const [id, entry] of this.#data) {
+			if (predicate(entry.value, id)) {
+				idsToInvalidate.push(id);
+			}
+		}
+
+		for (const id of idsToInvalidate) {
+			this.delete(id); // Usa o método delete existente para lidar com #data e #queue
+			invalidatedCount++;
+		}
+		return invalidatedCount;
 	}
 
 	#getNow = Date.now.bind(Date);

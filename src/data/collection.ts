@@ -11,7 +11,7 @@ import type {
   ValidationFunction,
   IndexSchemaType,
   ParsedIndexDefinition,
-} from "../types/index.js";
+} from "../types/index.js"; // Certifique-se que EvictionStrategy seja exportado de types/index.js ou importado de cache.ts
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
 
@@ -78,7 +78,11 @@ export default class Collection<Collections, K extends keyof Collections> {
 
     this.#writer = new Writer(this.#basePath);
 
-    this.#cache = new Cache<Document<Collections, K>>(options.cacheTimeout);
+    this.#cache = new Cache<Document<Collections, K>>(
+      options.cacheTimeout,
+      undefined, // Deixa o Cache usar seu maxSize padrão se não especificado por CollectionOptions
+      options.cacheEvictionStrategy, // Passa a estratégia de evicção
+    );
 
     // Deferring #ensureCollectionExists and index processing to #ensureInitialized
   }
@@ -575,5 +579,19 @@ export default class Collection<Collections, K extends keyof Collections> {
         await callback(doc, doc.id, this);
       }
     }
+  }
+
+  /**
+   * Invalida entradas do cache nesta coleção com base em um predicado.
+   * @param predicate Uma função que recebe um documento e seu id, e retorna true se a entrada do cache correspondente deve ser invalidada.
+   * @returns O número de itens invalidados do cache.
+   */
+  async invalidateCacheWhere(
+    predicate: (doc: Document<Collections, K>, id: string) => boolean,
+  ): Promise<number> {
+    await this.#ensureInitialized(); // Garante que o objeto de cache exista
+    // A asserção de tipo para 'doc' pode ser necessária dependendo da assinatura exata de invalidateWhere em Cache
+    // e como Document<Collections, K> se relaciona com T em Cache<T>
+    return this.#cache.invalidateWhere(predicate as (value: Document<Collections, K>, id: string) => boolean);
   }
 }
