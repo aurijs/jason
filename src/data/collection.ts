@@ -51,13 +51,14 @@ export default class Collection<Collections, K extends keyof Collections> {
     // Ensure 'id' is always indexed as a primary key (B-tree) if not explicitly defined
     const hasAnyIdIndex = options.indices
       ? options.indices
-          .split(',')
-          .map(s => s.trim())
-          .some(part =>
-              part === 'id' ||
-              part === '++id' ||
-              part === '@id' ||
-              part === '&id'
+          .split(",")
+          .map((s) => s.trim())
+          .some(
+            (part) =>
+              part === "id" ||
+              part === "++id" ||
+              part === "@id" ||
+              part === "&id"
           )
       : false;
 
@@ -81,7 +82,7 @@ export default class Collection<Collections, K extends keyof Collections> {
     this.#cache = new Cache<Document<Collections, K>>(
       options.cacheTimeout,
       undefined, // Deixa o Cache usar seu maxSize padrão se não especificado por CollectionOptions
-      options.cacheEvictionStrategy, // Passa a estratégia de evicção
+      options.cacheEvictionStrategy // Passa a estratégia de evicção
     );
 
     // Deferring #ensureCollectionExists and index processing to #ensureInitialized
@@ -470,6 +471,127 @@ export default class Collection<Collections, K extends keyof Collections> {
   }
 
   /**
+   * Creates multiple documents in the collection in a batch operation.
+   *
+   * @param dataArray - An array of document data to be created.
+   * @returns A promise that resolves to an object containing arrays of successfully created documents and errors encountered.
+   */
+  async batchCreate(dataArray: CollectionParam<Collections, K>[]): Promise<{
+    created: Document<Collections, K>[];
+    errors: { input: CollectionParam<Collections, K>; error: Error }[];
+  }> {
+    await this.#ensureInitialized();
+    const results = {
+      created: [] as Document<Collections, K>[],
+      errors: [] as { input: CollectionParam<Collections, K>; error: Error }[],
+    };
+
+    const operations = dataArray.map(async (data) => {
+      // ID generation logic similar to single create
+      // This does not handle auto-increment for batch operations without a centralized counter.
+      const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
+      const document = { ...data, id } as Document<Collections, K>;
+
+      if (!this.#schema(document)) {
+        throw new Error("Document failed schema validation");
+      }
+
+      await this.#writer.write(this.#encodeId(id), stringify(document));
+      this.#cache.update(id, document);
+      return document;
+    });
+
+    const settledResults = await Promise.allSettled(operations);
+
+    let successfulCreationsCount = 0;
+    settledResults.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        results.created.push(result.value);
+        successfulCreationsCount++;
+      } else {
+        results.errors.push({
+          input: dataArray[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    if (successfulCreationsCount > 0 && this.#metadata) {
+      await this.#metadata.incrementDocumentCount(successfulCreationsCount);
+    }
+
+    return results;
+  }
+
+  /**
+   * Updates multiple documents in the collection in a batch operation.
+   *
+   * @param updatesArray - An array of objects, each containing the `id` of the document to update and the `data` (partial) to apply.
+   * @returns A promise that resolves to an object containing arrays of successfully updated documents and errors encountered.
+   *          If a document to update is not found, it will be included in the errors array.
+   */
+  async batchUpdate(
+    updatesArray: {
+      id: string;
+      data: Partial<CollectionParam<Collections, K>>;
+    }[]
+  ): Promise<{
+    updated: Document<Collections, K>[];
+    errors: {
+      input: { id: string; data: Partial<CollectionParam<Collections, K>> };
+      error: Error;
+    }[];
+  }> {
+    await this.#ensureInitialized();
+    const results = {
+      updated: [] as Document<Collections, K>[],
+      errors: [] as {
+        input: { id: string; data: Partial<CollectionParam<Collections, K>> };
+        error: Error;
+      }[],
+    };
+
+    const operations = updatesArray.map(async (updateItem) =>
+      this.update(updateItem.id, updateItem.data)
+    );
+
+    const settledResults = await Promise.allSettled(operations);
+    let successfulUpdatesCount = 0;
+
+    settledResults.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        if (result.value) {
+          // update returns null if document not found or on other errors before throwing
+          results.updated.push(result.value);
+          successfulUpdatesCount++;
+        } else {
+          // This case handles when `this.update` returns null (e.g., document not found)
+          // but doesn't throw an error that Promise.allSettled would catch as 'rejected'.
+          results.errors.push({
+            input: updatesArray[index],
+            error: new DocumentNotFoundError(
+              `Document with id '${updatesArray[index].id}' not found for update.`
+            ),
+          });
+        }
+      } else {
+        results.errors.push({
+          input: updatesArray[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    if (successfulUpdatesCount > 0 && this.#metadata) {
+      // updateLastModified is already called by individual update operations if successful.
+      // No need to call it again here unless we optimize individual updates to not call it.
+      // For now, this is fine.
+    }
+
+    return results;
+  }
+
+  /**
    * Queries documents in the collection based on the provided filter function.
    *
    * Retrieves documents from the collection, applies the filter function to each
@@ -587,11 +709,13 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @returns O número de itens invalidados do cache.
    */
   async invalidateCacheWhere(
-    predicate: (doc: Document<Collections, K>, id: string) => boolean,
+    predicate: (doc: Document<Collections, K>, id: string) => boolean
   ): Promise<number> {
     await this.#ensureInitialized(); // Garante que o objeto de cache exista
     // A asserção de tipo para 'doc' pode ser necessária dependendo da assinatura exata de invalidateWhere em Cache
     // e como Document<Collections, K> se relaciona com T em Cache<T>
-    return this.#cache.invalidateWhere(predicate as (value: Document<Collections, K>, id: string) => boolean);
+    return this.#cache.invalidateWhere(
+      predicate as (value: Document<Collections, K>, id: string) => boolean
+    );
   }
 }
