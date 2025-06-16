@@ -5,22 +5,22 @@ import type { ValidationFunction } from "./utils.js";
  * Type to extract the document type from a collection
  */
 export type CollectionDocument<
-	T extends BaseCollections,
-	K extends keyof T,
+  T extends BaseCollections,
+  K extends keyof T
 > = BaseDocument<ExtractDocument<T[K]>>;
 
 /**
  * Base interface for collections map in JasonDB
  */
 export interface BaseCollections {
-	[key: string]: unknown[];
+  [key: string]: unknown[];
 }
 
 export type CollectionParam<Collections, T extends keyof Collections> = Omit<
-	Document<Collections, T>,
-	"id" | "_lastModified"
+  Document<Collections, T>,
+  "id" | "_lastModified"
 > &
-	Partial<Pick<Document<Collections, T>, "id" | "_lastModified">>;
+  Partial<Pick<Document<Collections, T>, "id" | "_lastModified">>;
 
 /**
  * Options for configuring a collection.
@@ -33,8 +33,24 @@ export type CollectionParam<Collections, T extends keyof Collections> = Omit<
  * @property generateMetadata - An optional flag to generate metadata for documents in the collection.
  */
 export interface CollectionOptions<T = BaseDocument> {
-	initialData?: T[];
-	schema?: ValidationFunction<T>;
-	cacheTimeout?: number;
-	generateMetadata?: boolean;
+  /**
+   * Optional string of index definitions for the collection.
+   * Each word separated by a comma defines an index according to JasonDB syntax:
+   * - `++fieldName`: Auto-incrementing primary key.
+   * - `@fieldName`: UUID v4 primary key.
+   * - `[field1+field2]`: Compound index.
+   * - `*fieldName`: Multi-value index (for arrays).
+   * - `&fieldName`: Unique index.
+   * - `fieldName`: Standard B-tree index.
+   * @example
+   * // Example index definitions
+   * const options = {
+   *   indices: '++id, &email, city, *tags'
+   * };
+   */
+  indices?: string;
+  initialData?: T[];
+  schema?: ValidationFunction<T>;
+  cacheTimeout?: number;
+  generateMetadata?: boolean;
 }
