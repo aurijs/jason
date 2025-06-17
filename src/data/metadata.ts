@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { parse, stringify } from "devalue";
 import { MetadataPersistenceError } from "../core/errors.js";
 import Writer from "../io/writer.js";
-import type { CollectionMetadata } from "../types/index.js";
+import type { CollectionMetadata, ParsedIndexDefinition, IndexSchemaType } from "../types/index.js"; // Added ParsedIndexDefinition and IndexSchemaType
 
 const MAX_METADATA_SIZE = 1024 * 10;
 
@@ -16,6 +16,60 @@ export default class Metadata {
 		this.#metadataPath = join(path, "_metadata.json");
 		this.#writer = new Writer(path);
 		this.#metadata = this.#initializeMetadata(path);
+	}
+
+	static parseIndexString(indicesString?: string): ParsedIndexDefinition[] {
+		if (!indicesString || indicesString.trim() === "") {
+			return [];
+		}
+
+		const definitions: ParsedIndexDefinition[] = [];
+		const parts = indicesString.split(',').map(s => s.trim()).filter(s => s !== '');
+
+		for (const part of parts) {
+			let type: IndexSchemaType;
+			let fieldName: string;
+			let fields: string[] | undefined;
+
+			if (part.startsWith('++')) {
+				type = "auto-increment-pk";
+				fieldName = part.substring(2);
+			} else if (part.startsWith('@')) {
+				type = "uuid-pk";
+				fieldName = part.substring(1);
+			} else if (part.startsWith('&')) {
+				type = "unique";
+				fieldName = part.substring(1);
+			} else if (part.startsWith('*')) {
+				type = "multi-value";
+				fieldName = part.substring(1);
+			} else if (part.startsWith('[') && part.endsWith(']')) {
+				type = "compound";
+				const fieldNames = part.substring(1, part.length - 1).split('+').map(f => f.trim());
+				if (fieldNames.length === 0 || fieldNames.some(f => f === '')) {
+					console.warn(`Invalid compound index format: ${part}. Skipping.`);
+					continue;
+				}
+				fieldName = fieldNames.join('+'); // Use combined name as the main fieldName for simplicity, or decide on a convention
+				fields = fieldNames;
+			} else {
+				type = "standard";
+				fieldName = part;
+			}
+
+			if (!fieldName) {
+				console.warn(`Invalid index definition: ${part}. Skipping.`);
+				continue;
+			}
+
+			definitions.push({
+				originalSpec: part,
+				type,
+				fieldName,
+				fields
+			});
+		}
+		return definitions;
 	}
 
 	get documentCount(): number {

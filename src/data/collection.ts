@@ -1,23 +1,28 @@
+import { parse, stringify } from "devalue";
 import crypto from "node:crypto";
 import { access, mkdir, readFile, readdir, unlink } from "node:fs/promises";
 import path from "node:path";
-import { parse, stringify } from "devalue";
 import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
 import Writer from "../io/writer.js";
 import type {
   CollectionOptions,
   CollectionParam,
   Document,
-  ValidationFunction,
   IndexSchemaType,
+  JsonSchema,
   ParsedIndexDefinition,
-} from "../types/index.js"; // Certifique-se que EvictionStrategy seja exportado de types/index.js ou importado de cache.ts
+  ValidationFunction,
+} from "../types/index.js";
+import type { EvictionStrategy } from "./cache.js";
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
 
 export default class Collection<Collections, K extends keyof Collections> {
   #basePath: string;
-  #schema: ValidationFunction<Document<Collections, K>>;
+  #schema:
+    | JsonSchema<Document<Collections, K>>
+    | ValidationFunction<Document<Collections, K>>
+    | undefined;
   #metadata: Metadata | null;
   #cache: Cache<Document<Collections, K>>;
   #writer: Writer;
@@ -28,6 +33,7 @@ export default class Collection<Collections, K extends keyof Collections> {
     type: "auto-increment-pk" | "uuid-pk";
   } | null = null;
   #isInitialized = false;
+  #name: K;
 
   /**
    * Constructs a new Collection.
@@ -40,52 +46,83 @@ export default class Collection<Collections, K extends keyof Collections> {
    * @param options.concurrencyStrategy - The concurrency strategy of the collection.
    * @param options.cacheTimeout - The cache timeout in milliseconds.
    */
+
   constructor(
     basePath: string,
     name: K,
-    options: CollectionOptions<Document<Collections, K>> = {}
+    options: CollectionOptions<Document<Collections, K>> & {
+      cacheTimeout?: number;
+      cacheEvictionStrategy?: EvictionStrategy;
+    } = {}
   ) {
+    this.#name = name;
     this.#basePath = path.join(basePath, name as string);
-    this.#schema = options.schema || (() => true);
+    this.#schema = options.schema;
 
-    // Ensure 'id' is always indexed as a primary key (B-tree) if not explicitly defined
-    const hasAnyIdIndex = options.indices
-      ? options.indices
-          .split(",")
-          .map((s) => s.trim())
-          .some(
-            (part) =>
-              part === "id" ||
-              part === "++id" ||
-              part === "@id" ||
-              part === "&id"
-          )
-      : false;
-
-    if (!hasAnyIdIndex) {
-      if (options.indices) {
-        this.#indicesOptionString = `id,${options.indices}`;
-      } else {
-        this.#indicesOptionString = `id`;
-      }
-    } else {
-      this.#indicesOptionString = options.indices;
-    }
+    this.#indicesOptionString = options.indices;
 
     this.#metadata =
-      options.generateMetadata !== false // Default to true if not specified
-        ? new Metadata(this.#basePath)
-        : null;
+      options.generateMetadata !== false ? new Metadata(this.#basePath) : null;
 
     this.#writer = new Writer(this.#basePath);
 
     this.#cache = new Cache<Document<Collections, K>>(
       options.cacheTimeout,
-      undefined, // Deixa o Cache usar seu maxSize padrão se não especificado por CollectionOptions
-      options.cacheEvictionStrategy // Passa a estratégia de evicção
+      undefined,
+      options.cacheEvictionStrategy
     );
+    // Initialization is deferred to #ensureInitialized
+  }
 
-    // Deferring #ensureCollectionExists and index processing to #ensureInitialized
+  /**
+   * Generates or retrieves the ID for a new document based on the collection's primary key configuration.
+   * If the document data already contains a value for the primary key field, that value is used.
+   * Otherwise, it generates an ID based on the primary key type (UUID or auto-increment).
+   *
+   * For 'auto-increment-pk', this implementation performs a rudimentary scan for the highest existing ID.
+   * A more robust implementation would store the last auto-incremented ID persistently (e.g., in metadata).
+   *
+   * @param documentData - The data for the document being created.
+   * @returns A promise that resolves to the generated or retrieved document ID.
+   */
+  async #generateIdForPrimaryKey(
+    documentData: CollectionParam<Collections, K>
+  ): Promise<string> {
+    if (!this.#primaryKeyConfig) {
+      console.warn(
+        "No primary key configured during ID generation. Defaulting to UUID."
+      );
+      return crypto.randomUUID();
+    }
+
+    const { fieldName, type } = this.#primaryKeyConfig;
+    let id: string | number | undefined = (documentData as any)[fieldName];
+
+    if (id !== undefined && id !== null) {
+      return String(id);
+    }
+
+    if (type === "uuid-pk") {
+      return crypto.randomUUID();
+    } else if (type === "auto-increment-pk") {
+      if (!this.#metadata) {
+        throw new Error("Metadata not initialized");
+      }
+
+      const autoIncKey = `autoinc/${fieldName}`;
+      // Get the current auto-increment value for this field
+      const currentAutoIncValue = this.#metadata.get(autoIncKey);
+      let nextId = (currentAutoIncValue ?? 0) + 1;
+
+      // Update the metadata store with the nextId for future use
+      this.#metadata.set(autoIncKey, nextId);
+      await this.#metadata.updateLastModified();
+
+      return String(nextId);
+    }
+
+    console.warn(`Unexpected primary key type '${type}'. Defaulting to UUID.`);
+    return crypto.randomUUID();
   }
 
   /**
@@ -109,44 +146,100 @@ export default class Collection<Collections, K extends keyof Collections> {
       await this.#metadata.load();
     }
 
+    let currentProcessedIndices: ParsedIndexDefinition[] = [];
+
+    // Parse indices from the stored string option
     if (this.#indicesOptionString) {
-      const parsed = this.#parseIndexSpecificationFromString(
+      currentProcessedIndices = this.#parseIndexSpecificationFromString(
         this.#indicesOptionString
       );
-      this.#processedIndices = parsed;
 
-      for (const def of parsed) {
-        // Determine primary key configuration (simplified: only 'id' field for now)
-        if (
-          (def.type === "auto-increment-pk" || def.type === "uuid-pk") &&
-          def.fieldName === "id"
-        ) {
-          if (this.#primaryKeyConfig) {
-            console.warn(
-              `Multiple primary key definitions found for 'id'. Using the first one: ${
-                this.#primaryKeyConfig.type
-              } on ${this.#primaryKeyConfig.fieldName}`
-            );
-          } else {
+      for (const def of currentProcessedIndices) {
+        if (def.type === "auto-increment-pk" || def.type === "uuid-pk") {
+          if (!this.#primaryKeyConfig) {
             this.#primaryKeyConfig = {
               fieldName: def.fieldName,
               type: def.type,
             };
-          }
-        }
-        // Register with metadata if it doesn't exist yet
-        if (
-          this.#metadata &&
-          !this.#metadata.indexes.includes(def.originalSpec)
-        ) {
-          try {
-            await this.#metadata.addIndex(def.originalSpec);
-          } catch (error) {
-            console.error(
-              `Failed to register index '${def.originalSpec}' with metadata:`,
-              error
+          } else if (this.#primaryKeyConfig.fieldName !== def.fieldName) {
+            console.warn(
+              `Multiple primary key definitions found. Ignoring '${
+                def.originalSpec
+              }' in favor of existing primary key on '${
+                this.#primaryKeyConfig.fieldName
+              }'.`
             );
           }
+        }
+      }
+    }
+
+    if (!this.#primaryKeyConfig) {
+      const defaultPk: ParsedIndexDefinition = {
+        originalSpec: "@id", // Default to @id if no PK is defined
+        type: "uuid-pk",
+        fieldName: "id",
+      };
+      this.#primaryKeyConfig = {
+        fieldName: defaultPk.fieldName,
+        type: defaultPk.type as "uuid-pk",
+      };
+      // Add default PK to processedIndices if it wasn't already there through explicit definition
+      if (
+        !currentProcessedIndices.some(
+          (idx) =>
+            idx.fieldName === defaultPk.fieldName &&
+            (idx.type === "uuid-pk" || idx.type === "auto-increment-pk")
+        )
+      ) {
+        currentProcessedIndices.unshift(defaultPk);
+      }
+    }
+
+    this.#processedIndices = currentProcessedIndices;
+
+    // Initialize auto-increment counter in metadata if using auto-increment-pk
+    if (
+      this.#metadata &&
+      this.#metadata &&
+      this.#primaryKeyConfig?.type === "auto-increment-pk"
+    ) {
+      const autoIncKey = `autoinc/${this.#primaryKeyConfig.fieldName}`;
+      if (this.#metadata.get(autoIncKey) === undefined) {
+        // Initialize from existing documents
+        const allDocs = await this.readAll();
+        let maxId = 0;
+        for (const doc of allDocs) {
+          const docId = (doc as any)[this.#primaryKeyConfig.fieldName];
+          if (typeof docId === "number" && docId > maxId) {
+            maxId = docId;
+          }
+        }
+        this.#metadata.set(autoIncKey, maxId);
+        await this.#metadata.updateLastModified();
+      }
+    }
+
+    // Log parsed indices for now (actual index creation/management will be a separate step)
+    if (this.#processedIndices.length > 0) {
+      console.log(
+        `[${String(this.#name)}] Parsed index definitions:`,
+        this.#processedIndices
+      );
+    }
+
+    for (const def of this.#processedIndices) {
+      if (
+        this.#metadata &&
+        !this.#metadata.indexes.includes(def.originalSpec)
+      ) {
+        try {
+          await this.#metadata.addIndex(def.originalSpec);
+        } catch (error) {
+          console.error(
+            `Failed to register index '${def.originalSpec}' with metadata:`,
+            error
+          );
         }
       }
     }
@@ -283,10 +376,26 @@ export default class Collection<Collections, K extends keyof Collections> {
 
       // ID generation logic will be updated in a subsequent step based on this.#primaryKeyConfig
       // For now, it uses the existing logic.
-      const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
-      const document = { ...data, id } as Document<Collections, K>;
+      const id = await this.#generateIdForPrimaryKey(data);
+      // Ensure the generated/provided ID is correctly assigned to the document,
+      // and also assign it to the correct primary key field.
+      const document = {
+        ...data,
+        [this.#primaryKeyConfig!.fieldName]: id,
+      } as Document<Collections, K>;
 
-      if (!this.#schema(document)) {
+      // Schema validation logic
+      if (this.#schema) {
+        if (typeof this.#schema === "function") {
+          if (!this.#schema(document)) {
+            throw new Error("Document failed schema validation");
+          }
+        } else {
+          // Assuming JsonSchema validation would be handled by a separate validator function
+          // For now, if it's a JsonSchema object, we don't validate here.
+          // A future enhancement would integrate a JSON schema validator.
+        }
+      } else {
         throw new Error("Document failed schema validation");
       }
 
@@ -430,7 +539,17 @@ export default class Collection<Collections, K extends keyof Collections> {
       id: current.id,
     } as Document<Collections, K>;
 
-    if (!this.#schema(updated)) {
+    // Schema validation logic
+    if (this.#schema) {
+      if (typeof this.#schema === "function") {
+        if (!this.#schema(updated)) {
+          throw new Error("Document failed schema validation");
+        }
+      } else {
+        // Assuming JsonSchema validation would be handled by a separate validator function
+        // For now, if it's a JsonSchema object, we don't validate here.
+        // A future enhancement would integrate a JSON schema validator.
+      }
       throw new Error("Document failed schema validation");
     }
 
@@ -492,7 +611,17 @@ export default class Collection<Collections, K extends keyof Collections> {
       const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
       const document = { ...data, id } as Document<Collections, K>;
 
-      if (!this.#schema(document)) {
+      // Schema validation logic
+      if (this.#schema) {
+        if (typeof this.#schema === "function") {
+          if (!this.#schema(document)) {
+            throw new Error("Document failed schema validation");
+          }
+        } else {
+          // Assuming JsonSchema validation would be handled by a separate validator function
+          // For now, if it's a JsonSchema object, we don't validate here.
+          // A future enhancement would integrate a JSON schema validator.
+        }
         throw new Error("Document failed schema validation");
       }
 
