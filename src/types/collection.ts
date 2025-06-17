@@ -1,5 +1,6 @@
 import type { BaseDocument, Document, ExtractDocument } from "./document.js";
 import type { ValidationFunction } from "./utils.js";
+import type { JsonSchema } from "./jason.js";
 
 /**
  * Type to extract the document type from a collection
@@ -33,25 +34,10 @@ export type CollectionParam<Collections, T extends keyof Collections> = Omit<
  * @property generateMetadata - An optional flag to generate metadata for documents in the collection.
  */
 export interface CollectionOptions<T = BaseDocument> {
-  /**
-   * Optional string of index definitions for the collection.
-   * Each word separated by a comma defines an index according to JasonDB syntax:
-   * - `++fieldName`: Auto-incrementing primary key.
-   * - `@fieldName`: UUID v4 primary key.
-   * - `[field1+field2]`: Compound index.
-   * - `*fieldName`: Multi-value index (for arrays).
-   * - `&fieldName`: Unique index.
-   * - `fieldName`: Standard B-tree index.
-   * @example
-   * // Example index definitions
-   * const options = {
-   *   indices: '++id, &email, city, *tags'
-   * };
-   */
-  indices?: string;
+  schema?: JsonSchema<T> | ValidationFunction<T>; // Allow both schema types
+  idKey?: string;
+  cacheSize?: number;
+  indices?: string; // Added for explicit indexing
   initialData?: T[];
-  schema?: ValidationFunction<T>;
-  cacheTimeout?: number;
-  cacheEvictionStrategy?: 'lru' | 'lfu'; // Adicionado para configurar a estratégia de evicção do cache
   generateMetadata?: boolean;
 }
