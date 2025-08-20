@@ -391,13 +391,10 @@ export default class Collection<Collections, K extends keyof Collections> {
             throw new Error("Document failed schema validation");
           }
         } else {
-          // Assuming JsonSchema validation would be handled by a separate validator function
-          // For now, if it's a JsonSchema object, we don't validate here.
-          // A future enhancement would integrate a JSON schema validator.
+          // Placeholder for JsonSchema object validation
+          // console.warn("JSON Schema validation not yet implemented. Document assumed valid.");
         }
-      } else {
-        throw new Error("Document failed schema validation");
-      }
+      } // If no schema is defined, validation passes by default
 
       await Promise.all([
         // Use encoded ID for the writer filename
@@ -438,7 +435,9 @@ export default class Collection<Collections, K extends keyof Collections> {
       const data = await readFile(documentPath, "utf-8");
       const document = parse(data) as Document<Collections, K>;
 
-      if (document.id !== id) {
+      // Verify using the configured primary key field
+      if (String((document as any)[this.#primaryKeyConfig!.fieldName]) !== id) {
+        // console.warn(`Document ID mismatch: expected ${id}, found ${String((document as any)[this.#primaryKeyConfig!.fieldName])} in file for ${this.#getDocumentPath(id)}`);
         return null;
       }
       this.#cache.update(id, document);
@@ -533,10 +532,22 @@ export default class Collection<Collections, K extends keyof Collections> {
     const current = await this.read(id);
     if (!current) return null;
 
+    // Prevent primary key modification during update
+    const pkFieldName = this.#primaryKeyConfig!.fieldName;
+    if (
+      data.hasOwnProperty(pkFieldName) &&
+      (data as any)[pkFieldName] !== (current as any)[pkFieldName]
+    ) {
+      console.warn(
+        `Attempted to modify primary key field '${pkFieldName}' during update. This is not allowed. The original PK value will be retained.`
+      );
+      // delete (data as any)[pkFieldName]; // Option 1: remove from payload
+    }
+
     const updated = {
       ...current,
       ...data,
-      id: current.id,
+      [pkFieldName]: (current as any)[pkFieldName], // Ensure PK is not changed
     } as Document<Collections, K>;
 
     // Schema validation logic
@@ -546,12 +557,10 @@ export default class Collection<Collections, K extends keyof Collections> {
           throw new Error("Document failed schema validation");
         }
       } else {
-        // Assuming JsonSchema validation would be handled by a separate validator function
-        // For now, if it's a JsonSchema object, we don't validate here.
-        // A future enhancement would integrate a JSON schema validator.
+        // Placeholder for JsonSchema object validation
+        // console.warn("JSON Schema validation not yet implemented. Document assumed valid.");
       }
-      throw new Error("Document failed schema validation");
-    }
+    } // If no schema is defined, validation passes by default
 
     // Use encoded ID for the writer filename
     await this.#writer.write(this.#encodeId(id), stringify(updated));
@@ -605,50 +614,39 @@ export default class Collection<Collections, K extends keyof Collections> {
       errors: [] as { input: CollectionParam<Collections, K>; error: Error }[],
     };
 
-    const operations = dataArray.map(async (data) => {
-      // ID generation logic similar to single create
-      // This does not handle auto-increment for batch operations without a centralized counter.
-      const id = (data as Document<Collections, K>).id ?? crypto.randomUUID();
-      const document = { ...data, id } as Document<Collections, K>;
+    const operations = dataArray.map(async (dataItem) => {
+      try {
+        const id = await this.#generateIdForPrimaryKey(dataItem);
+        const document = {
+          ...dataItem,
+          [this.#primaryKeyConfig!.fieldName]: id,
+        } as Document<Collections, K>;
 
-      // Schema validation logic
-      if (this.#schema) {
-        if (typeof this.#schema === "function") {
-          if (!this.#schema(document)) {
-            throw new Error("Document failed schema validation");
+        // Schema validation logic
+        if (this.#schema) {
+          if (typeof this.#schema === "function") {
+            if (!this.#schema(document)) {
+              throw new Error("Document failed schema validation");
+            }
+          } else {
+            // Placeholder for JsonSchema object validation
+            // console.warn("JSON Schema validation not yet implemented. Document assumed valid.");
           }
-        } else {
-          // Assuming JsonSchema validation would be handled by a separate validator function
-          // For now, if it's a JsonSchema object, we don't validate here.
-          // A future enhancement would integrate a JSON schema validator.
-        }
-        throw new Error("Document failed schema validation");
-      }
+        } // If no schema is defined, validation passes by default
 
-      await this.#writer.write(this.#encodeId(id), stringify(document));
-      this.#cache.update(id, document);
-      return document;
-    });
+        await Promise.all([
+          this.#writer.write(this.#encodeId(id), stringify(document)),
+          this.#metadata?.incrementDocumentCount(),
+        ]);
 
-    const settledResults = await Promise.allSettled(operations);
-
-    let successfulCreationsCount = 0;
-    settledResults.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        results.created.push(result.value);
-        successfulCreationsCount++;
-      } else {
-        results.errors.push({
-          input: dataArray[index],
-          error: result.reason,
-        });
+        this.#cache.update(id, document);
+        results.created.push(document);
+      } catch (error) {
+        results.errors.push({ input: dataItem, error: error as Error });
       }
     });
 
-    if (successfulCreationsCount > 0 && this.#metadata) {
-      await this.#metadata.incrementDocumentCount(successfulCreationsCount);
-    }
-
+    await Promise.all(operations);
     return results;
   }
 

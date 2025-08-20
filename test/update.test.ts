@@ -1,9 +1,9 @@
-import { rm, readFile } from "node:fs/promises";
+import { parse } from "devalue";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
 import type { TestCollections } from "./types";
-import { parse } from "devalue";
 
 const testFilename = "test_update_db";
 const filePath = path.join(process.cwd(), testFilename);
@@ -69,14 +69,14 @@ describe("User - UPDATE", () => {
   });
 
   it("should update cache after successful update", async () => {
-    const collection = db.collection('users');
+    const collection = db.collection("users");
     const created = await collection.create(createData);
-    
+
     const beforeUpdate = await collection.read(created.id);
-    
+
     await collection.update(created.id, updateData);
     const afterUpdate = await collection.read(created.id);
-    
+
     expect(afterUpdate).toMatchObject(updateData);
     // Ensure beforeUpdate is not null before assertion
     if (beforeUpdate) {
@@ -85,7 +85,7 @@ describe("User - UPDATE", () => {
       // Fail test if beforeUpdate was unexpectedly null
       expect(beforeUpdate).toBeDefined();
     }
-  })
+  });
 
   it("should persist changes to disk", async () => {
     const collection = db.collection("users");

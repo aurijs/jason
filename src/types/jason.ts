@@ -3,7 +3,7 @@
  * @template T - The type this schema validates
  */
 export type JsonSchema<T> = {
-  [key: string]: unknown;
+  [key in keyof T]: T[key];
 };
 
 /**

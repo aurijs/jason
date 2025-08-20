@@ -80,6 +80,15 @@ export default class Metadata {
 		return this.#metadata.indexes;
 	}
 
+	get<K extends keyof CollectionMetadata>(key: K): CollectionMetadata[K] {
+		return this.#metadata[key];
+	}
+
+	async set<K extends keyof CollectionMetadata>(key: K, value: CollectionMetadata[K]): Promise<void> {
+		this.#metadata[key] = value;
+		await this.#persist({ [key]: value } as Partial<CollectionMetadata>);
+	}
+
 	async incrementDocumentCount(amount = 1) {
 		this.#metadata.documentCount += amount;
 		await this.#persist({ documentCount: this.#metadata.documentCount });
@@ -177,12 +186,6 @@ export default class Metadata {
 			const [stats, data] = await Promise.all([
 				stat(this.#metadataPath),
 				readFile(this.#metadataPath, "utf-8"),
-				// new Promise((_, reject) =>
-				//   setTimeout(
-				//     () => reject(new Error("Metadata load timeout")),
-				//     METADATA_PARSE_TIMEOUT
-				//   )
-				// ),
 			]);
 
 			if (stats.size > MAX_METADATA_SIZE) {
@@ -196,7 +199,7 @@ export default class Metadata {
 				...this.#initializeMetadata(this.#metadata.name),
 				...validated,
 			};
-		} catch (error) {
+		} catch {
 			await this.#persist(this.#metadata);
 		}
 	}

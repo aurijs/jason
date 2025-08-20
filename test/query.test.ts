@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
-import type { TestCollections, TestPost, Log } from "./types";
 import type { Document } from "../src/types/index.js";
+import type { TestCollections } from "./types";
 
 describe("Collection - Query", () => {
   const testFilename = "test_query_db";

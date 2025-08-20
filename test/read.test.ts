@@ -2,8 +2,7 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import JasonDB from "../src/core/main";
-import type { Document } from "../src/types";
-import type { TestCollections, TestUser, TestPost } from "./types";
+import type { TestCollections, TestPost, TestUser } from "./types";
 
 const testFilename = "test_read_db";
 const filePath = path.join(process.cwd(), testFilename);
