@@ -1,36 +1,34 @@
-export class MetadataPersistenceError extends Error {
-	constructor(message: string, originalError?: Error) {
-		super(message);
-		this.name = "MetadataPersistenceError";
-		if (originalError) {
-			this.stack += `\nCaused by: ${originalError.stack}`;
-		}
-	}
-}
+import { Data } from "effect";
 
-export class DocumentNotFoundError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "DocumentNotFoundError";
-	}
-}
+export class DatabaseError extends Data.TaggedError("DatabaseError")<{
+  message: string;
+  cause: Error;
+}> {}
 
-export class DeleteOperationError extends Error {
-	originalError: unknown;
+export class MetadataPersistenceError extends Data.TaggedError(
+  "MetadataPersistenceError"
+)<{
+  message: string;
+  cause: Error;
+}> {}
 
-	constructor(message: string, originalError?: unknown) {
-		super(message);
-		this.name = "DeleteOperationError";
-		this.originalError = originalError;
-	}
-}
+export class DocumentNotFoundError extends Data.TaggedError(
+  "DocumentNotFoundError"
+)<{
+  message: string;
+  cause: Error;
+}> {}
 
-export class QueryOperationError extends Error {
-	originalError: unknown;
+export class DeleteOperationError extends Data.TaggedError(
+  "DeleteOperationError"
+)<{
+  message: string;
+  cause: Error;
+}> {}
 
-	constructor(message: string, originalError?: unknown) {
-		super(message);
-		this.name = "QueryOperationError";
-		this.originalError = originalError;
-	}
-}
+export class QueryOperationError extends Data.TaggedError(
+  "QueryOperationError"
+)<{
+  message: string;
+  cause: Error;
+}> {}
