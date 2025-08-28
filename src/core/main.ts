@@ -1,4 +1,7 @@
-import { access, mkdir, readdir } from "node:fs/promises";
+import { FileSystem } from "@effect/platform";
+import { NodeFileSystem } from "@effect/platform-node";
+import { Effect, Layer, Ref, Runtime } from "effect";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import Collection from "../data/collection.js";
 import type {
@@ -6,103 +9,131 @@ import type {
   Document,
   JasonDBOptions,
 } from "../types/index.js";
+import { DatabaseError } from "./errors.js";
 
-export default class JasonDB<T> {
-  #basePath: string;
-  #collections = new Map<keyof T, Collection<T, keyof T>>();
+function ensureDataDirExists(base_path: string) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
 
-  /**
-   * Creates a new JasonDB instance with the given configuration.
-   * @param options - Either a string representing the database name (will be created in current working directory),
-   *                 or a JasonDBOptions configuration object
-   * @example
-   * // Simple usage
-   * const db = new JasonDB('my-database');
-   * 
-   * // Advanced usage
-   * const db = new JasonDB({
-   *   basename: 'my-database',
-   *   path: './custom-location'
-   * });
-   */
-  constructor(options: string | JasonDBOptions) {
-    if (typeof options === "string") {
-      const cwd = path.resolve(".");
-      this.#basePath = path.join(cwd, options);
-    } else {
-		const cwd = path.resolve(options.path);
-    this.#basePath = path.join(cwd, options.basename);
-	}
+    const exists = yield* fs.exists(base_path).pipe(
+      Effect.catchTag("SystemError", (error) => {
+        if (error.reason === "NotFound") return Effect.succeed(false);
+        return Effect.succeed(true);
+      })
+    );
 
-    this.#ensureDataDirExists();
-  }
-
-  async #ensureDataDirExists() {
-    try {
-      await access(this.#basePath);
-    } catch {
-      await mkdir(this.#basePath, { recursive: true });
+    if (!exists) {
+      yield* fs.makeDirectory(base_path);
     }
-  }
+  });
+}
 
-  /**
-   * Retrieves or creates a collection in the database.
-   *
-   * If a collection with the given name does not exist, it initializes a new collection
-   * with the provided options and stores it. If the collection already exists, it returns the existing one.
-   *
-   * @param name - The name of the collection.
-   * @param options - Optional settings for the collection.
-   * @param options.initialData - An array of initial data to populate the collection.
-   * @param options.schema - A validation function for the collection's documents.
-   * @param options.concurrencyStrategy - The concurrency strategy to use for the collection.
-   * @param options.cacheTimeout - The cache timeout in milliseconds.
-   * @param options.generateMetadata - Whether to generate metadata for the collection.
-   * @param options.indices - An optional string of index definitions for the collection (e.g., ['++id', '&email', '*tags']).
-   * @returns The collection instance associated with the given name.
-   */
-  collection<K extends keyof T>(
-    name: K,
-    options: CollectionOptions<Document<T, K>> = {}
-  ): Collection<T, K> {
-    const existingCollection = this.#collections.get(name);
+/**
+ * Creates a new JasonDB instance with the given configuration.
+ * @param options - Either a string representing the database name (will be created in current working directory),
+ *                 or a JasonDBOptions configuration object
+ * @example
+ * // Simple usage
+ * const db = await JasonDB('my-database');
+ *
+ * // Advanced usage
+ * const db = await JasonDB({
+ *   basename: 'my-database',
+ *   path: './custom-location'
+ * });
+ */
+export async function Jason<T>(options: string | JasonDBOptions) {
+  const program = Effect.gen(function* () {
+    const base_path =
+      typeof options === "string"
+        ? path.join(path.resolve("."), options)
+        : path.join(path.resolve(options.path), options.basename);
 
-    if (existingCollection) {
-      return existingCollection as Collection<T, K>;
-    }
+    const collections_ref = yield* Ref.make(
+      new Map<keyof T, Collection<T, keyof T>>()
+    );
 
-    const newCollection = new Collection<T, K>(this.#basePath, name, options);
+    const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
 
-    this.#collections.set(name, newCollection);
+    yield* ensureDataDirExists(base_path);
 
-    return newCollection;
-  }
+    const listCollections = async () => {
+      const effect = Effect.gen(function* () {
+        const existing_collections = yield* collections_ref.get;
+        if (existing_collections.size > 0) {
+          return Array.from(existing_collections.keys());
+        }
 
-  /**
-   * Lists all collections in the database.
-   *
-   * Reads the base directory and returns the names of all subdirectories,
-   * which represent the collections.
-   *
-   * @returns A promise that resolves to an array of collection names.
-   * If an error occurs, it resolves to an empty array.
-   */
-  async listCollections(): Promise<(keyof T)[]> {
-    try {
-      if (this.#collections.size > 0)
-        return Array.from(this.#collections.keys());
+        const entries = yield* Effect.tryPromise({
+          try: async () => {
+            const entries = await readdir(base_path, { withFileTypes: true });
+            return entries
+              .filter(
+                (entry) => entry.isDirectory() && !entry.name.startsWith("_")
+              )
+              .map((entry) => entry.name) as (keyof T)[];
+          },
+          catch: () => {
+            return [];
+          },
+        });
 
-      const entries = await readdir(this.#basePath, { withFileTypes: true });
-      return entries
-        .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
-        .map((entry) => entry.name) as (keyof T)[];
-    } catch (error) {
-      console.error("Failed to list collections", {
-        path: this.#basePath,
-        error: error instanceof Error ? error.message : "Unknown error",
+        return entries;
       });
 
-      return [];
-    }
-  }
+      return Runtime.runPromise(runtime)(effect);
+    };
+
+    /**
+     * Retrieves or creates a collection in the database.
+     *
+     * If a collection with the given name does not exist, it initializes a new collection
+     * with the provided options and stores it. If the collection already exists, it returns the existing one.
+     *
+     * @param name - The name of the collection.
+     * @param options - Optional settings for the collection.
+     * @param options.initialData - An array of initial data to populate the collection.
+     * @param options.schema - A validation function for the collection's documents.
+     * @param options.concurrencyStrategy - The concurrency strategy to use for the collection.
+     * @param options.cacheTimeout - The cache timeout in milliseconds.
+     * @param options.generateMetadata - Whether to generate metadata for the collection.
+     * @param options.indices - An optional string of index definitions for the collection (e.g., ['++id', '&email', '*tags']).
+     * @returns The collection instance associated with the given name.
+     */
+    const collection = <K extends keyof T>(
+      name: K,
+      options: CollectionOptions<Document<T, K>> = {}
+    ) => {
+      const effect = Ref.get(collections_ref).pipe(
+        Effect.flatMap((existing_collections) => {
+          if (existing_collections.has(name)) {
+            return Effect.succeed(
+              existing_collections.get(name) as Collection<T, K>
+            );
+          }
+          const newCollection = new Collection<T, K>(base_path, name, options);
+          return Ref.updateAndGet(collections_ref, (map) =>
+            map.set(name, newCollection)
+          ).pipe(Effect.map(() => newCollection));
+        })
+      );
+
+      return Runtime.runSync(runtime)(effect);
+    };
+
+    return {
+      collection,
+      listCollections,
+    };
+  });
+
+  const AppLayer = Layer.mergeAll(NodeFileSystem.layer);
+
+  return Effect.runPromise(program.pipe(Effect.provide(AppLayer))).catch(
+    (error) =>
+      new DatabaseError({
+        message: "Error initializing Database",
+        cause: error,
+      })
+  );
 }
