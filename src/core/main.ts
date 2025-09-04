@@ -1,6 +1,6 @@
 import { FileSystem } from "@effect/platform";
 import { NodeFileSystem } from "@effect/platform-node";
-import { Cause, Effect, Layer, Ref, Runtime } from "effect";
+import { Effect, Layer, Ref, Runtime } from "effect";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import Collection from "../data/collection.js";
@@ -43,6 +43,7 @@ const make = <T>(
           );
         }
         const new_collection = new Collection<T, K>(base_path, name, options);
+
         return Ref.updateAndGet(collections_ref, (map) =>
           map.set(name, new_collection)
         ).pipe(Effect.map(() => new_collection));
@@ -128,6 +129,10 @@ export async function Jason<T>(options: string | JasonDBOptions) {
         name: K,
         options?: CollectionOptions<Document<T, K>>
       ) => Runtime.runPromise(runtime)(collectionEffect(name, options)),
+
+      /**
+       * List all collections in the database
+       */
       listCollections: () => Runtime.runPromise(runtime)(listCollectionsEffect),
     };
   });
