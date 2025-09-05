@@ -1,1 +1,1 @@
-export { default as JasonDB } from "./core/main.js";
+export * from './core/main.js';
