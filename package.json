@@ -64,6 +64,8 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@effect/platform": "^0.90.6",
+    "@effect/platform-node": "^0.96.0",
     "effect": "^3.17.8"
   }
 }
