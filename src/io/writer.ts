@@ -1,125 +1,72 @@
+import { Deferred, Effect, Layer, Queue, Ref } from "effect";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { retryAsyncOperation } from "../utils/utils.js";
+import { WriterConfig, WriterService } from "./writer.service.js";
 
-interface FileState {
-  locked: boolean;
-  nextData: string | null;
-  nextPromise: Promise<void> | null;
-  nextResolve: (() => void) | null;
-  nextReject: ((error: Error) => void) | null;
-}
+const random_string = Effect.sync(
+  () => Math.random().toString(36).slice(2) + Date.now().toString(36)
+);
 
-function randomString() {
-  return `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-}
+const get_temp_path = (path: string) =>
+  Effect.gen(function* () {
+    return join(path, `$.tmp_${yield* random_string}`);
+  });
 
-function getTempPath(path: string) {
-  return join(path, `$.tmp_${randomString()}`);
-}
+const get_file_path = (basePath: string, fileName: string) =>
+  Effect.sync(() => join(basePath, `${fileName}.json`));
 
-function getFilePath(basePath: string, fileName: string) {
-  return join(basePath, `${fileName}.json`);
-}
+type WriteRequest = [string, Deferred.Deferred<void, Error>];
 
-export default class Writer {
-  #basePath: string;
-  #queue = new Map<string, FileState>();
+export const WriterLive = Layer.effect(
+  WriterService,
+  Effect.gen(function* () {
+    const { basePath } = yield* WriterConfig;
+    const fileQueues = yield* Ref.make(new Map<string, Queue<WriteRequest>>());
 
-  /**
-   * Constructs a new Writer instance.
-   * @param basePath The path to the file to write to.
-   */
-  constructor(basePath: string) {
-    this.#basePath = basePath;
-  }
-
-  async #atomicWrite(tempPath: string, filePath: string, data: string) {
-    await writeFile(tempPath, data, "utf-8");
-    await retryAsyncOperation(() => rename(tempPath, filePath));
-  }
-
-  async #write(filename: string, data: string) {
-    const queue = this.#queue;
-
-    // biome-ignore lint/style/noNonNullAssertion: ignored for now
-    const state = queue.get(filename)!;
-    state.locked = true;
-
-    const filePath = getFilePath(this.#basePath, filename);
-    const tempPath = getTempPath(this.#basePath);
-
-    try {
-      await this.#atomicWrite(tempPath, filePath, data);
-      state.nextResolve?.();
-      return true;
-    } catch (error) {
-      state.nextReject?.(error as Error);
-      throw error;
-    } finally {
-      state.locked = false;
-      if (state.nextData !== null) {
-        const nextData = state.nextData;
-        state.nextData = null;
-        await this.write(filename, nextData);
-      } else {
-        state.nextPromise = null;
-        state.nextResolve = null;
-        state.nextReject = null;
-        queue.delete(filename);
-      }
-    }
-  }
-
-  /**
-   * Writes data to a file with the given filename.
-   *
-   * If the file is currently being written to, the data is queued to be written
-   * once the current write operation completes. Ensures that writes are
-   * performed atomically and handles concurrent write requests by queuing them.
-   *
-   * @param fileName - The name of the file to write to.
-   * @param data - The data to be written to the file.
-   * @returns A promise that resolves to true when the write operation is complete.
-   */
-  async write(fileName: string, data: string) {
-    const queue = this.#queue;
-
-    if (!queue.has(fileName)) {
-      queue.set(fileName, {
-        locked: false,
-        nextData: null,
-        nextPromise: null,
-        nextResolve: null,
-        nextReject: null,
+    const atomicWrite = (tempPath: string, filePath: string, data: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          await writeFile(tempPath, data, "utf-8");
+          await rename(tempPath, filePath);
+        },
+        catch: (error) => new Error(String(error)),
       });
-    }
 
-    const state = queue.get(fileName);
+    const processFileQueue = (
+      queue: Queue<WriteRequest>,
+      fileName: string
+    ) =>
+      Effect.gen(function* () {
+        const [data, deferred] = yield* Queue.take(queue);
+        const filePath = yield* get_file_path(basePath, fileName);
+        const tempPath = yield* get_temp_path(basePath);
+        const result = yield* Effect.exit(atomicWrite(tempPath, filePath, data));
+        yield* Effect.match(result, {
+          onFailure: (cause) => Deferred.fail(deferred, cause.squash),
+          onSuccess: () => Deferred.succeed(deferred, undefined),
+        });
+      }).pipe(Effect.forever);
 
-    if (!state) {
-      throw new Error(`File state not found for ${fileName}`);
-    }
-
-    if (!state.locked) {
-      return this.#write(fileName, data);
-    }
-
-    if (state.nextPromise) {
-      state.nextData = data;
-      return new Promise<boolean>((resolve, reject) => {
-        state.nextPromise?.then(() => resolve(true)).catch(reject);
+    const getOrCreateQueue = (fileName: string) =>
+      Effect.gen(function* () {
+        const map = yield* Ref.get(fileQueues);
+        let queue = map.get(fileName);
+        if (!queue) {
+          queue = yield* Queue.unbounded<WriteRequest>();
+          yield* Ref.update(fileQueues, (map) => map.set(fileName, queue!));
+          yield* processFileQueue(queue, fileName).pipe(Effect.forkDaemon);
+        }
+        return queue;
       });
-    }
 
-    state.nextData = data;
-    state.nextPromise = new Promise<void>((resolve, reject) => {
-      state.nextResolve = resolve;
-      state.nextReject = reject;
-    });
-
-    return new Promise<boolean>((resolve, reject) => {
-      state.nextPromise?.then(() => resolve(true)).catch(reject);
-    });
-  }
-}
+    return {
+      write: (fileName: string, data: string) =>
+        Effect.gen(function* () {
+          const deferred = yield* Deferred.make<void, Error>();
+          const queue = yield* getOrCreateQueue(fileName);
+          yield* Queue.offer(queue, [data, deferred]);
+          return yield* Deferred.await(deferred);
+        }),
+    };
+  })
+);

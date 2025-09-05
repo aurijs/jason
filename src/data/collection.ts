@@ -1,8 +1,14 @@
+import { FileSystem, Path } from "@effect/platform";
 import { parse, stringify } from "devalue";
+import { Context, Effect, Layer, Option, pipe } from "effect";
 import crypto from "node:crypto";
 import { access, mkdir, readFile, readdir, unlink } from "node:fs/promises";
 import path from "node:path";
-import { DeleteOperationError, DocumentNotFoundError } from "../core/errors.js";
+import {
+  DatabaseError,
+  DeleteOperationError,
+  DocumentNotFoundError,
+} from "../core/errors.js";
 import Writer from "../io/writer.js";
 import type {
   CollectionOptions,
@@ -16,6 +22,152 @@ import type {
 import type { EvictionStrategy } from "./cache.js";
 import Cache from "./cache.js";
 import Metadata from "./metadata.js";
+
+interface ICollection<Collections, K extends keyof Collections> {
+  readonly create: (
+    data: CollectionParam<Collections, K>
+  ) => Effect.Effect<Document<Collections, K>, DatabaseError>;
+  readonly read: (
+    id: string
+  ) => Effect.Effect<Option.Option<Document<Collections, K>>>;
+  readonly readAll: (options?: {
+    skip?: number;
+    limit?: number;
+  }) => Effect.Effect<Array<Document<Collections, K>>, DatabaseError>;
+  readonly update: (
+    id: string,
+    data: Partial<CollectionParam<Collections, K>>
+  ) => Effect.Effect<
+    Document<Collections, K>,
+    DatabaseError | DocumentNotFoundError
+  >;
+  readonly delete: (
+    id: string
+  ) => Effect.Effect<true, DatabaseError | DocumentNotFoundError>;
+  readonly has: (id: string) => Effect.Effect<boolean>;
+
+  readonly batchCreate: (
+    dataArray: CollectionParam<Collections, K>[]
+  ) => Effect.Effect<
+    Document<Collections, K>[],
+    { input: CollectionParam<Collections, K>; error: DatabaseError }[]
+  >;
+
+  readonly batchUpdate: (
+    dataArray: {
+      id: string;
+      data: Partial<CollectionParam<Collections, K>>;
+    }[]
+  ) => Effect.Effect<
+    Document<Collections, K>[],
+    {
+      input: { id: string; data: Partial<CollectionParam<Collections, K>> };
+      error: DatabaseError;
+    }[]
+  >;
+  readonly query: (
+    filter: (doc: Document<Collections, K>) => boolean,
+    options?: {
+      batchSize?: number;
+      skip?: number;
+      limit?: number;
+    }
+  ) => Effect.Effect<Document<Collections, K>[], DatabaseError>;
+
+  readonly forEach: (
+    callback: (
+      value: Document<Collections, K>,
+      id: string,
+      collection: this
+    ) => void | Promise<void>
+  ) => Effect.Effect<void, DatabaseError>;
+}
+
+export const makeCollection = <Collections, K extends keyof Collections>(
+  base_path: string,
+  name: K,
+  options: CollectionOptions<Document<Collections, K>> = {}
+) => {
+  const tag = CollectionService<Collections, K>(name);
+
+  return Layer.effect(
+    tag,
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      const collection_path = path.join(base_path, String(name));
+      const cache = new Cache<Document<Collections, K>>();
+
+      const initialize_effect = Effect.once(fs.makeDirectory(collection_path));
+
+      const getDocumentPath = (id: string) => {
+        const encodedId = Buffer.from(id).toString("base64url");
+        return path.join(collection_path, `${encodedId}.json`);
+      };
+
+      const create = (data: CollectionParam<Collections, K>) =>
+        Effect.gen(function* () {
+          yield* initialize_effect;
+          const id = crypto.randomUUID();
+          const document = { ...data, id } as Document<Collections, K>;
+          const document_path = getDocumentPath(id);
+
+          yield* fs.writeFileString(document_path, JSON.stringify(document));
+          cache.update(id, document);
+
+          return document;
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new DatabaseError({
+                cause,
+                message: `Failed to create document`,
+              })
+          )
+        );
+
+      const read = (id: string) => {
+        Effect.gen(function* () {
+          yield* initialize_effect;
+          const cached = cache.get(id);
+
+          if (cached) return Option.some(cached);
+
+          return yield* pipe(
+            fs.readFileString(getDocumentPath(id)),
+            Effect.map((content) =>
+              Option.some(JSON.parse(content) as Document<Collections, K>)
+            ),
+            Effect.catchTag("SystemError", (error) =>
+              error.reason === "NotFound"
+                ? Effect.succeed(Option.none())
+                : Effect.fail(error)
+            )
+          ).pipe(Effect.orDie);
+        });
+      };
+
+      const has = (id: string) =>
+        Effect.gen(function* () {
+          yield* initialize_effect;
+          return yield* fs.exists(getDocumentPath(id));
+        });
+
+      return {
+        create,
+        read,
+        has
+      } as ICollection<Collections, K>;
+    })
+  );
+};
+
+const CollectionService = <Collections, K extends keyof Collections>(name: K) =>
+  Context.Tag(`CollectionService/${String(name)}`)<
+    typeof CollectionService,
+    ICollection<Collections, K>
+  >();
 
 export default class Collection<Collections, K extends keyof Collections> {
   #basePath: string;
