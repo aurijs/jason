@@ -1,150 +1,174 @@
 import { FileSystem } from "@effect/platform";
 import { NodeFileSystem } from "@effect/platform-node";
-import { Effect, Layer, Ref, Runtime } from "effect";
-import { readdir } from "node:fs/promises";
-import path from "node:path";
-import Collection from "../data/collection.js";
-import type {
-  CollectionOptions,
-  Document,
-  JasonDBOptions,
-} from "../types/index.js";
-import { DatabaseError } from "./errors.js";
+import { Context, Effect, Layer, Runtime, Schema } from "effect";
 
-const ensureDataDirExists = (base_path: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-
-    const exists = yield* fs.exists(base_path).pipe(
-      Effect.catchTag("SystemError", (error) => {
-        if (error.reason === "NotFound") return Effect.succeed(false);
-        return Effect.succeed(true);
-      })
-    );
-
-    if (!exists) {
-      yield* fs.makeDirectory(base_path);
-    }
-  });
-
-const make = <T>(
-  base_path: string,
-  collections_ref: Ref.Ref<Map<keyof T, Collection<T, keyof T>>>
-) => {
-  const collectionEffect = <K extends keyof T>(
-    name: K,
-    options: CollectionOptions<Document<T, K>> = {}
-  ) =>
-    Ref.get(collections_ref).pipe(
-      Effect.flatMap((existing_collections) => {
-        if (existing_collections.has(name)) {
-          return Effect.succeed(
-            existing_collections.get(name) as Collection<T, K>
-          );
-        }
-        const new_collection = new Collection<T, K>(base_path, name, options);
-
-        return Ref.updateAndGet(collections_ref, (map) =>
-          map.set(name, new_collection)
-        ).pipe(Effect.map(() => new_collection));
-      })
-    );
-
-  const listCollectionsEffect = Effect.gen(function* () {
-    const existing_collections = yield* collections_ref.get;
-    if (existing_collections.size > 0) {
-      return Array.from(existing_collections.keys());
-    }
-
-    const entries = yield* Effect.tryPromise({
-      try: async () => {
-        const entries = await readdir(base_path, { withFileTypes: true });
-        return entries
-          .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
-          .map((entry) => entry.name) as (keyof T)[];
-      },
-      catch: () => {
-        return [];
-      },
-    });
-
-    return entries;
-  });
-
-  return { collectionEffect, listCollectionsEffect };
+type TypeMap = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  date: Date;
+  any: any;
+  unknown: unknown;
 };
 
-/**
- * Creates a new JasonDB instance with the given configuration.
- * @param options - Either a string representing the database name (will be created in current working directory),
- *                 or a JasonDBOptions configuration object
- * @example
- * // Simple usage
- * const db = await JasonDB('my-database');
- *
- * // Advanced usage
- * const db = await JasonDB({
- *   basename: 'my-database',
- *   path: './custom-location'
- * });
- */
-export async function Jason<T>(options: string | JasonDBOptions) {
-  const program = Effect.gen(function* () {
-    const base_path =
-      typeof options === "string"
-        ? path.join(path.resolve("."), options)
-        : path.join(path.resolve(options.path), options.basename);
+type CleanKey<T extends string> = T extends
+  | `++${infer K}`
+  | `&${infer K}`
+  | `*${infer K}`
+  ? K
+  : T;
 
-    const collections_ref = yield* Ref.make(
-      new Map<keyof T, Collection<T, keyof T>>()
-    );
+type ParseField<T extends string> = T extends `${infer Key}:${infer TypeName}`
+  ? TypeName extends keyof TypeMap
+    ? { [K in CleanKey<Key>]: TypeMap[TypeName] }
+    : { [K in CleanKey<Key>]: any }
+  : { [K in CleanKey<T>]: string };
 
-    const runtime = yield* Effect.runtime<FileSystem.FileSystem>();
+type Split<S extends string, D extends string> = string extends S
+  ? string[]
+  : S extends ""
+  ? []
+  : S extends `${infer T}${D}${infer U}`
+  ? [T, ...Split<U, D>]
+  : [S];
 
-    yield* ensureDataDirExists(base_path);
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+  k: infer I
+) => void
+  ? I
+  : never;
 
-    const { collectionEffect, listCollectionsEffect } = make<T>(
-      base_path,
-      collections_ref
-    );
+type ParseSchemaString<T extends string> = UnionToIntersection<
+  ParseField<Split<T, ",">[number]>
+>;
 
-    return {
-      /**
-       * Retrieves or creates a collection in the database.
-       *
-       * If a collection with the given name does not exist, it initializes a new collection
-       * with the provided options and stores it. If the collection already exists, it returns the existing one.
-       *
-       * @param name - The name of the collection.
-       * @param options - Optional settings for the collection.
-       * @param options.initialData - An array of initial data to populate the collection.
-       * @param options.schema - A validation function for the collection's documents.
-       * @param options.concurrencyStrategy - The concurrency strategy to use for the collection.
-       * @param options.cacheTimeout - The cache timeout in milliseconds.
-       * @param options.generateMetadata - Whether to generate metadata for the collection.
-       * @param options.indices - An optional string of index definitions for the collection (e.g., ['++id', '&email', '*tags']).
-       * @returns The collection instance associated with the given name.
-       */
-      collection: <K extends keyof T>(
-        name: K,
-        options?: CollectionOptions<Document<T, K>>
-      ) => Runtime.runPromise(runtime)(collectionEffect(name, options)),
-
-      /**
-       * List all collections in the database
-       */
-      listCollections: () => Runtime.runPromise(runtime)(listCollectionsEffect),
-    };
-  });
-
-  const AppLayer = Layer.mergeAll(NodeFileSystem.layer);
-
-  return Effect.runPromise(program.pipe(Effect.provide(AppLayer))).catch(
-    (error) => {
-      throw new DatabaseError({
-        message: "Error initializing Database",
-        cause: error,
-      });
-    }
-  );
+interface Document {
+  id: string;
+  [key: string]: any;
 }
+
+interface CollectionEffect<D extends Document> {
+  create: (data: Omit<D, "id">) => Effect.Effect<Document | undefined, Error>;
+}
+
+interface Collection<D extends Document> {
+  create: (data: Omit<D, "id">) => Promise<D>;
+}
+
+interface DatabaseEffect<Collections extends Record<string, any>> {
+  readonly collections: {
+    [K in keyof Collections]: CollectionEffect<Collections[K]>;
+  };
+}
+
+interface Database<Collections extends Record<string, any>> {
+  readonly collections: {
+    [K in keyof Collections]: Collection<Collections[K]>;
+  };
+}
+
+type InferCollections<T extends Record<string, SchemaOrString>> = {
+  [K in keyof T]: T[K] extends Schema.Schema<any, infer A>
+    ? A
+    : T[K] extends string
+    ? ParseSchemaString<T[K]>
+    : any;
+};
+
+class DatabaseService extends Context.Tag("DatabaseService")<
+  DatabaseService,
+  DatabaseEffect<any>
+>() {}
+
+type SchemaOrString = Schema.Schema<any, any> | string;
+
+interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
+  readonly path: string;
+  readonly collections: T;
+}
+
+function parseSchemaFromString(schema_string: string) {
+  const fields = schema_string.split(",").reduce((acc, field) => {
+    const field_name = field.replace(/^\+\+|[&*]/, "");
+    acc[field_name] = Schema.Any;
+    return acc;
+  }, {} as Record<string, Schema.Schema<any, any>>);
+  return Schema.Struct(fields);
+}
+
+export const createJasonDBLayer = <const T extends Record<string, SchemaOrString>>(
+  config: JasonDBConfig<T>
+) =>
+  Layer.scoped(
+    DatabaseService,
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const base_path = config.path;
+      yield* fs.makeDirectory(base_path, { recursive: true });
+
+      const collectionServices: Record<string, CollectionEffect<any>> = {};
+
+      for (const name in config.collections) {
+        const schema_or_string = config.collections[name];
+        const schema =
+          typeof schema_or_string === "string"
+            ? parseSchemaFromString(schema_or_string)
+            : schema_or_string;
+
+        const collection_path = `${base_path}/${name}`;
+        yield* fs.makeDirectory(collection_path, { recursive: true });
+
+        collectionServices[name] = {
+          create: (data) =>
+            Effect.gen(function* () {
+              const id = crypto.randomUUID();
+              const document_path = `${collection_path}/${id}.json`;
+              const document = { ...data, id } as Document;
+
+              yield* fs.writeFileString(
+                document_path,
+                JSON.stringify(document)
+              );
+
+              return document;
+            }),
+        };
+      }
+
+      type CollectionsSchema = {
+        [K in keyof T]: T[K] extends Schema.Schema<any, infer A> ? A : any;
+      };
+
+      const databaseService: DatabaseEffect<CollectionsSchema> = {
+        collections: collectionServices as any,
+      };
+
+      return databaseService;
+    })
+  ).pipe(Layer.provide(NodeFileSystem.layer));
+
+export const createJasonDB = async <const T extends Record<string, SchemaOrString>>(
+  config: JasonDBConfig<T>
+): Promise<Database<InferCollections<T>>> => {
+  const layer = createJasonDBLayer(config);
+  const runtime = await Effect.runPromise(
+    Layer.toRuntime(layer).pipe(Effect.scoped)
+  );
+  const run = Runtime.runPromise(runtime);
+  const effect_base_db = await run(DatabaseService);
+  const promise_based_collection: Record<string, Collection<any>> = {};
+
+  for (const name in effect_base_db.collections) {
+    const effect_based_collection = effect_base_db.collections[name];
+
+    promise_based_collection[name] = {
+      create: (data: any) => run(effect_based_collection.create(data)),
+    };
+  }
+
+  const promise_based_db = {
+    collections: promise_based_collection,
+  };
+
+  return promise_based_db as Database<InferCollections<T>>;
+};
