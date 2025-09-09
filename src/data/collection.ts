@@ -315,10 +315,8 @@ export default class Collection<Collections, K extends keyof Collections> {
             };
           } else if (this.#primaryKeyConfig.fieldName !== def.fieldName) {
             console.warn(
-              `Multiple primary key definitions found. Ignoring '${
-                def.originalSpec
-              }' in favor of existing primary key on '${
-                this.#primaryKeyConfig.fieldName
+              `Multiple primary key definitions found. Ignoring '${def.originalSpec
+              }' in favor of existing primary key on '${this.#primaryKeyConfig.fieldName
               }'.`
             );
           }

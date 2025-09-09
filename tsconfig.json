@@ -26,6 +26,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
+    "exactOptionalPropertyTypes": true,
+    "types": ["vitest/globals"],
     "plugins": [
       {
         "name": "@effect/language-service"
