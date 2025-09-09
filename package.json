@@ -57,16 +57,16 @@
     "@types/bun": "latest",
     "@vitest/coverage-v8": "2.1.9",
     "async-mutex": "^0.5.0",
-    "devalue": "^5.1.1",
+    "devalue": "^5.3.2",
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@effect/platform": "^0.90.6",
-    "@effect/platform-node": "^0.96.0",
-    "effect": "^3.17.8",
+    "@effect/platform": "^0.90.7",
+    "@effect/platform-node": "^0.96.1",
+    "effect": "^3.17.13",
     "tsup": "^8.5.0"
   }
 }
