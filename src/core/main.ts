@@ -2,104 +2,34 @@ import { FileSystem } from "@effect/platform";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Context, Effect, Layer, Runtime, Schema } from "effect";
 import { makeCollection } from "../services/collection.js";
-
-type TypeMap = {
-  string: string;
-  number: number;
-  boolean: boolean;
-  date: Date;
-  any: any;
-  unknown: unknown;
-};
-
-type CleanKey<T extends string> = T extends
-  | `++${infer K}`
-  | `&${infer K}`
-  | `*${infer K}`
-  ? K
-  : T;
-
-type ParseField<T extends string> = T extends `${infer Key}:${infer TypeName}`
-  ? TypeName extends keyof TypeMap
-  ? { [K in CleanKey<Key>]: TypeMap[TypeName] }
-  : { [K in CleanKey<Key>]: any }
-  : { [K in CleanKey<T>]: string };
-
-type Split<S extends string, D extends string> = string extends S
-  ? string[]
-  : S extends ""
-  ? []
-  : S extends `${infer T}${D}${infer U}`
-  ? [T, ...Split<U, D>]
-  : [S];
-
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
-  k: infer I
-) => void
-  ? I
-  : never;
-
-type ParseSchemaString<T extends string> = UnionToIntersection<
-  ParseField<Split<T, ",">[number]>
->;
-
-interface Document {
-  id: string;
-  [key: string]: any;
-}
-
-interface CollectionEffect<D extends Document> {
-  create: (data: Omit<D, "id">) => Effect.Effect<Document | undefined, Error>;
-  read: (id: string) => Effect.Effect<D, Error>;
-}
-
-interface Collection<D extends Document> {
-  create: (data: Omit<D, "id">) => Promise<D>;
-  read: (id: string) => Promise<D>;
-}
-
-interface DatabaseEffect<Collections extends Record<string, any>> {
-  readonly collections: {
-    [K in keyof Collections]: CollectionEffect<Collections[K]>;
-  };
-}
-
-interface Database<Collections extends Record<string, any>> {
-  readonly collections: {
-    [K in keyof Collections]: Collection<Collections[K]>;
-  };
-}
-
-type InferCollections<T extends Record<string, SchemaOrString>> = {
-  [K in keyof T]: T[K] extends Schema.Schema<any, infer A>
-  ? A
-  : T[K] extends string
-  ? ParseSchemaString<T[K]>
-  : any;
-};
+import type { Database, DatabaseEffect } from "../types/database.js";
+import type { JasonDBConfig, SchemaOrString } from "../types/schema.js";
+import type {
+  Collection,
+  CollectionEffect,
+  InferCollections
+} from "../types/collection.js";
 
 class DatabaseService extends Context.Tag("DatabaseService")<
   DatabaseService,
   DatabaseEffect<any>
->() { }
-
-type SchemaOrString = Schema.Schema<any, any> | string;
-
-interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
-  readonly path: string;
-  readonly collections: T;
-}
+>() {}
 
 function parseSchemaFromString(schema_string: string) {
-  const fields = schema_string.split(",").reduce((acc, field) => {
-    const field_name = field.replace(/^\+\+|[&*]/, "");
-    acc[field_name] = Schema.Any;
-    return acc;
-  }, {} as Record<string, Schema.Schema<any, any>>);
+  const fields = schema_string.split(",").reduce(
+    (acc, field) => {
+      const field_name = field.replace(/^\+\+|[&*]/, "");
+      acc[field_name] = Schema.Any;
+      return acc;
+    },
+    {} as Record<string, Schema.Schema<any, any>>
+  );
   return Schema.Struct(fields);
 }
 
-export const createJasonDBLayer = <const T extends Record<string, SchemaOrString>>(
+export const createJasonDBLayer = <
+  const T extends Record<string, SchemaOrString>
+>(
   config: JasonDBConfig<T>
 ) =>
   Layer.scoped(
@@ -116,12 +46,15 @@ export const createJasonDBLayer = <const T extends Record<string, SchemaOrString
         const schema =
           typeof schema_or_string === "string"
             ? parseSchemaFromString(schema_or_string)
-            : schema_or_string as Schema.Schema<any, any>;
+            : (schema_or_string as Schema.Schema<any, any>);
 
         const collection_path = `${base_path}/${name}`;
         yield* fs.makeDirectory(collection_path, { recursive: true });
 
-        collection_services[name] = yield* makeCollection(collection_path, schema);
+        collection_services[name] = yield* makeCollection(
+          collection_path,
+          schema
+        );
       }
 
       type CollectionsSchema = {
@@ -129,14 +62,16 @@ export const createJasonDBLayer = <const T extends Record<string, SchemaOrString
       };
 
       const databaseService: DatabaseEffect<CollectionsSchema> = {
-        collections: collection_services as any,
+        collections: collection_services as any
       };
 
       return databaseService;
     })
   ).pipe(Layer.provide(NodeFileSystem.layer));
 
-export const createJasonDB = async <const T extends Record<string, SchemaOrString>>(
+export const createJasonDB = async <
+  const T extends Record<string, SchemaOrString>
+>(
   config: JasonDBConfig<T>
 ): Promise<Database<InferCollections<T>>> => {
   const layer = createJasonDBLayer(config);
@@ -152,12 +87,16 @@ export const createJasonDB = async <const T extends Record<string, SchemaOrStrin
 
     promise_based_collection[name] = {
       create: (data: any) => run(effect_based_collection.create(data)),
-      read: (id: string) => run(effect_based_collection.read(id))
+      findById: (id: string) => run(effect_based_collection.findById(id)),
+      delete: (id: string) => run(effect_based_collection.delete(id)),
+      find: (options: any) => run(effect_based_collection.find(options)),
+      update: (id: string, data: any) =>
+        run(effect_based_collection.update(id, data))
     };
   }
 
   const promise_based_db = {
-    collections: promise_based_collection,
+    collections: promise_based_collection
   };
 
   return promise_based_db as Database<InferCollections<T>>;
