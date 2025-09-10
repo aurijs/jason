@@ -54,19 +54,24 @@
     "lightweight"
   ],
   "devDependencies": {
+    "@effect/platform": "^0.90.7",
+    "@effect/platform-node": "^0.96.1",
     "@types/bun": "latest",
     "@vitest/coverage-v8": "2.1.9",
     "async-mutex": "^0.5.0",
     "devalue": "^5.3.2",
+    "effect": "^3.17.13",
+    "oxlint": "^1.14.0",
+    "tsup": "^8.5.0",
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@effect/platform": "^0.90.7",
-    "@effect/platform-node": "^0.96.1",
-    "effect": "^3.17.13",
-    "tsup": "^8.5.0"
+    "@prettier/plugin-oxc": "^0.0.4",
+    "@typescript/native-preview": "^7.0.0-dev.20250910.1",
+    "eslint": "^9.35.0",
+    "prettier": "^3.6.2"
   }
 }
