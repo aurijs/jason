@@ -9,6 +9,7 @@ import type {
   CollectionEffect,
   InferCollections
 } from "../types/collection.js";
+import { JsonLive } from "../layers/json.js";
 
 class DatabaseService extends Context.Tag("DatabaseService")<
   DatabaseService,
@@ -26,6 +27,8 @@ function parseSchemaFromString(schema_string: string) {
   );
   return Schema.Struct(fields);
 }
+
+const InfraLayer = Layer.merge(NodeFileSystem.layer, JsonLive);
 
 export const createJasonDBLayer = <
   const T extends Record<string, SchemaOrString>
@@ -67,7 +70,36 @@ export const createJasonDBLayer = <
 
       return databaseService;
     })
-  ).pipe(Layer.provide(NodeFileSystem.layer));
+  ).pipe(Layer.provide(InfraLayer));
+
+/**
+ * Creates a Promise client from an Effect service.
+ *
+ * @param effect_service A Record of functions that return Effects.
+ * @param run A function that takes an Effect and returns a Promise of the Effect's result.
+ * @returns A Record where each key is a function that returns a Promise of the Effect's result.
+ */
+function createPromiseClient(
+  effect_service: CollectionEffect<any>,
+  run: (effect: Effect.Effect<any, any, any>) => Promise<any>
+): Collection<any> {
+  const promice_clent: any = {};
+
+  (Object.keys(effect_service) as Array<keyof CollectionEffect<any>>).forEach(
+    (key) => {
+      const prop = effect_service[key];
+
+      if (typeof prop === "function") {
+        const effectFn = prop as (
+          ...args: any[]
+        ) => Effect.Effect<any, any, any>;
+        promise_client[key] = (...args: any[]) => run(effectFn(...args));
+      }
+    }
+  );
+
+  return promice_clent;
+}
 
 export const createJasonDB = async <
   const T extends Record<string, SchemaOrString>
@@ -85,14 +117,10 @@ export const createJasonDB = async <
   for (const name in effect_base_db.collections) {
     const effect_based_collection = effect_base_db.collections[name];
 
-    promise_based_collection[name] = {
-      create: (data: any) => run(effect_based_collection.create(data)),
-      findById: (id: string) => run(effect_based_collection.findById(id)),
-      delete: (id: string) => run(effect_based_collection.delete(id)),
-      find: (options: any) => run(effect_based_collection.find(options)),
-      update: (id: string, data: any) =>
-        run(effect_based_collection.update(id, data))
-    };
+    promise_based_collection[name] = createPromiseClient(
+      effect_based_collection,
+      run
+    );
   }
 
   const promise_based_db = {
