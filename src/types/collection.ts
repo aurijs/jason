@@ -1,43 +1,55 @@
-import type { BaseDocument, Document, ExtractDocument } from "./document.js";
-import type { ValidationFunction } from "./utils.js";
-import type { JsonSchema } from "./jason.js";
+import type { Effect, Schema, Stream } from "effect";
+import type { ParseSchemaString, SchemaOrString } from "./schema.js";
+import type { Document } from "./document.js";
+import type { DatabaseError } from "../core/errors.js";
 
-/**
- * Type to extract the document type from a collection
- */
-export type CollectionDocument<
-  T extends BaseCollections,
-  K extends keyof T
-> = BaseDocument<ExtractDocument<T[K]>>;
-
-/**
- * Base interface for collections map in JasonDB
- */
-export interface BaseCollections {
-  [key: string]: unknown[];
+export interface QueryOptions<Doc> {
+  where: (doc: Doc) => boolean;
+  order_by?: {
+    field: keyof Doc;
+    order: "asc" | "desc";
+  };
+  skip?: number;
+  limit?: number;
 }
 
-export type CollectionParam<Collections, T extends keyof Collections> = Omit<
-  Document<Collections, T>,
-  "id" | "_lastModified"
-> &
-  Partial<Pick<Document<Collections, T>, "id" | "_lastModified">>;
-
-/**
- * Options for configuring a collection.
- *
- * @template T - The type of documents in the collection.
- * @property initialData - An optional array of initial data to populate the collection.
- * @property schema - An optional validation function for documents in the collection.
- * @property concurrencyStrategy - An optional concurrency strategy for the collection.
- * @property cacheTimeout - An optional cache timeout in milliseconds.
- * @property generateMetadata - An optional flag to generate metadata for documents in the collection.
- */
-export interface CollectionOptions<T = BaseDocument> {
-  schema?: JsonSchema<T> | ValidationFunction<T>; // Allow both schema types
-  idKey?: string;
-  cacheSize?: number;
-  indices?: string; // Added for explicit indexing
-  initialData?: T[];
-  generateMetadata?: boolean;
+export interface CollectionEffect<Doc extends Document> {
+  readonly create: (data: Omit<Doc, "id">) => Effect.Effect<Document, Error>;
+  readonly findById: (id: string) => Effect.Effect<Doc, Error>;
+  readonly update: (
+    id: string,
+    data: Partial<Omit<Doc, "id">>
+  ) => Effect.Effect<Doc, DatabaseError>;
+  readonly delete: (id: string) => Effect.Effect<boolean, DatabaseError>;
+  readonly find: (options: QueryOptions<Doc>) => Effect.Effect<Doc[], Error>;
+  readonly findStream: (
+    options: QueryOptions<Doc>
+  ) => Stream.Stream<Doc, DatabaseError>;
 }
+
+export interface Collection<Doc extends Document> {
+  /**
+   * Creates a new document in the collection
+   * @param data - The data to be stored in the document
+   * @returns The created document
+   */
+  create: (data: Omit<Doc, "id">) => Promise<Doc>;
+
+  /**
+   * Retrieves a document by its id
+   * @param id - The id of the document to retrieve
+   * @returns The retrieved document
+   */
+  findById: (id: string) => Promise<Doc>;
+  readonly update: (id: string, data: Partial<Omit<Doc, "id">>) => Promise<Doc>;
+  readonly delete: (id: string) => Promise<boolean>;
+  readonly find: (options: QueryOptions<Doc>) => Promise<Doc[]>;
+}
+
+export type InferCollections<T extends Record<string, SchemaOrString>> = {
+  [K in keyof T]: T[K] extends Schema.Schema<any, infer A>
+    ? A
+    : T[K] extends string
+    ? ParseSchemaString<T[K]>
+    : any;
+};
