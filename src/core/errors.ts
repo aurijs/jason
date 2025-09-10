@@ -32,3 +32,8 @@ export class QueryOperationError extends Data.TaggedError(
   message: string;
   cause: Error;
 }> {}
+
+export class JsonError extends Data.TaggedError("JsonError")<{
+  message: string;
+  cause: unknown;
+}> {}
