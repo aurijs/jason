@@ -2,6 +2,7 @@ import { FileSystem } from "@effect/platform";
 import { Effect, Schema, Stream } from "effect";
 import { DatabaseError } from "../core/errors.js";
 import type { QueryOptions } from "../types/collection.js";
+import { JsonService } from "./json.js";
 
 export const makeCollection = <Document extends { id: string }>(
   collection_path: string,
@@ -9,6 +10,7 @@ export const makeCollection = <Document extends { id: string }>(
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const jsonService = yield* JsonService;
 
     yield* fs.makeDirectory(collection_path, { recursive: true });
 
@@ -18,7 +20,7 @@ export const makeCollection = <Document extends { id: string }>(
       const docs = yield* Effect.all(
         files.map((file) =>
           fs.readFileString(`${collection_path}/${file}`).pipe(
-            Effect.flatMap((content) => Effect.try(() => JSON.parse(content))),
+            Effect.flatMap(jsonService.parse),
             Effect.flatMap((json) => Schema.decode(schema)(json))
           )
         )
@@ -38,7 +40,7 @@ export const makeCollection = <Document extends { id: string }>(
         const document = { ...data, id };
 
         const encoded_content = yield* Schema.encode(schema)(document);
-        const content = JSON.stringify({ ...encoded_content, id });
+        const content = yield* jsonService.stringify({ ...encoded_content, id });
         yield* fs.writeFileString(document_path, content);
 
         return document;
@@ -53,7 +55,7 @@ export const makeCollection = <Document extends { id: string }>(
       Effect.gen(function* () {
         const document_path = `${collection_path}/${id}.json`;
         const data = yield* fs.readFileString(document_path);
-        const json = yield* Effect.try(() => JSON.parse(data));
+        const json = yield* jsonService.parse(data);
         const document = yield* Schema.decode(schema)(json);
 
         return document;
@@ -83,7 +85,7 @@ export const makeCollection = <Document extends { id: string }>(
         const validated_document =
           yield* Schema.encode(schema)(updated_document);
 
-        const content = JSON.stringify(validated_document);
+        const content = yield* jsonService.stringify(validated_document);
 
         yield* fs.writeFileString(`${collection_path}/${id}.json`, content);
 
@@ -145,9 +147,7 @@ export const makeCollection = <Document extends { id: string }>(
         Stream.mapEffect(
           (file) =>
             fs.readFileString(`${collection_path}/${file}`).pipe(
-              Effect.flatMap((content) =>
-                Effect.try(() => JSON.parse(content))
-              ),
+              Effect.flatMap(jsonService.parse),
               Effect.flatMap((json) => Schema.decode(schema)(json))
             ),
           { concurrency: 16 }
