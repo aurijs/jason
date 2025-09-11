@@ -83,7 +83,7 @@ function createPromiseClient(
   effect_service: CollectionEffect<any>,
   run: (effect: Effect.Effect<any, any, any>) => Promise<any>
 ): Collection<any> {
-  const promice_clent: any = {};
+  const promise_client: any = {};
 
   (Object.keys(effect_service) as Array<keyof CollectionEffect<any>>).forEach(
     (key) => {
@@ -98,7 +98,7 @@ function createPromiseClient(
     }
   );
 
-  return promice_clent;
+  return promise_client;
 }
 
 export const createJasonDB = async <
