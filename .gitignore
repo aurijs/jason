@@ -25,6 +25,8 @@ wheels/
 
 .roomodes
 
+tmp
+
 # Virtual Environments
 venv/
 .env/
