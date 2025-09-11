@@ -1,3 +1,5 @@
+# check out what am i doing on this [discussion](https://github.com/aurijs/jason/discussions/10) 😉
+
 # jason db 📦
 
 ![image with logo and name of package](./static/markdown-image.png)
