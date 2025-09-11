@@ -11,8 +11,8 @@ import type {
 } from "../types/collection.js";
 import { JsonLive } from "../layers/json.js";
 
-class DatabaseService extends Context.Tag("DatabaseService")<
-  DatabaseService,
+export class JasonDB extends Context.Tag("DatabaseService")<
+  JasonDB,
   DatabaseEffect<any>
 >() {}
 
@@ -36,7 +36,7 @@ export const createJasonDBLayer = <
   config: JasonDBConfig<T>
 ) =>
   Layer.scoped(
-    DatabaseService,
+    JasonDB,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const base_path = config.path;
@@ -111,7 +111,7 @@ export const createJasonDB = async <
     Layer.toRuntime(layer).pipe(Effect.scoped)
   );
   const run = Runtime.runPromise(runtime);
-  const effect_base_db = await run(DatabaseService);
+  const effect_base_db = await run(JasonDB);
   const promise_based_collection: Record<string, Collection<any>> = {};
 
   for (const name in effect_base_db.collections) {
