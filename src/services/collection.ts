@@ -1,6 +1,7 @@
 import { FileSystem } from "@effect/platform";
 import { Effect, Schema, Stream } from "effect";
 import { DatabaseError } from "../core/errors.js";
+import { makeMetadata } from "../layers/metadata.js";
 import type { QueryOptions } from "../types/collection.js";
 import { JsonService } from "./json.js";
 
@@ -11,6 +12,8 @@ export const makeCollection = <Document extends { id: string }>(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const jsonService = yield* JsonService;
+    const metadata_path = `${collection_path}/_metadata.json`;
+    const metadataService = yield* makeMetadata(metadata_path);
 
     yield* fs.makeDirectory(collection_path, { recursive: true });
 
@@ -18,12 +21,14 @@ export const makeCollection = <Document extends { id: string }>(
       const files = yield* fs.readDirectory(collection_path);
 
       const docs = yield* Effect.all(
-        files.map((file) =>
-          fs.readFileString(`${collection_path}/${file}`).pipe(
-            Effect.flatMap(jsonService.parse),
-            Effect.flatMap((json) => Schema.decode(schema)(json))
+        files
+          .filter((file) => !file.startsWith("_"))
+          .map((file) =>
+            fs.readFileString(`${collection_path}/${file}`).pipe(
+              Effect.flatMap(jsonService.parse),
+              Effect.flatMap((json) => Schema.decode(schema)(json))
+            )
           )
-        )
       );
       return docs;
     }).pipe(
@@ -40,9 +45,13 @@ export const makeCollection = <Document extends { id: string }>(
         const document = { ...data, id };
 
         const encoded_content = yield* Schema.encode(schema)(document);
-        const content = yield* jsonService.stringify({ ...encoded_content, id });
+        const content = yield* jsonService.stringify({
+          ...encoded_content,
+          id
+        });
         yield* fs.writeFileString(document_path, content);
 
+        yield* metadataService.incrementCount;
         return document;
       }).pipe(
         Effect.mapError(
@@ -89,6 +98,7 @@ export const makeCollection = <Document extends { id: string }>(
 
         yield* fs.writeFileString(`${collection_path}/${id}.json`, content);
 
+        yield* metadataService.touch;
         return updated_document;
       }).pipe(
         Effect.mapError(
@@ -105,7 +115,10 @@ export const makeCollection = <Document extends { id: string }>(
         const file_path = `${collection_path}/${id}.json`;
         const exist = yield* fs.exists(file_path);
         if (!exist) return false;
+
         yield* fs.remove(file_path);
+
+        yield* metadataService.decrementCount;
         return true;
       }).pipe(
         Effect.mapError(
@@ -166,6 +179,9 @@ export const makeCollection = <Document extends { id: string }>(
     const findOne = (options: QueryOptions<Document>) =>
       find({ ...options, limit: 1 }).pipe(Effect.map((docs) => docs[0]));
 
+    const count = metadataService.get.pipe(Effect.map((m) => m.document_count));
+    const getMetadata = metadataService.get;
+
     return {
       create,
       findById,
@@ -173,6 +189,8 @@ export const makeCollection = <Document extends { id: string }>(
       delete: deleteFn,
       find,
       findOne,
-      findStream
+      findStream,
+      count,
+      getMetadata
     };
   });
