@@ -5,7 +5,7 @@ export const IndexDefinitionSchema = Schema.Struct({
   multi_entry: Schema.Boolean
 });
 
-export type IndexDefinition = Schema.Schema.Type<typeof IndexDefinitionSchema>;
+export type IndexDefinition = typeof IndexDefinitionSchema.Type;
 
 export const CollectionMetadataSchema = Schema.Struct({
   created_at: Schema.Date,
@@ -14,6 +14,4 @@ export const CollectionMetadataSchema = Schema.Struct({
   indexes: Schema.Record({ key: Schema.String, value: IndexDefinitionSchema })
 });
 
-export type CollectionMetadata = Schema.Schema.Type<
-  typeof CollectionMetadataSchema
->;
+export type CollectionMetadata = typeof CollectionMetadataSchema.Type;
