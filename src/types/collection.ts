@@ -1,7 +1,7 @@
-import type { Effect, Schema, Stream } from "effect";
-import type { ParseSchemaString, SchemaOrString } from "./schema.js";
-import type { Document } from "./document.js";
+import { Schema, type Effect, type Stream } from "effect";
 import type { DatabaseError } from "../core/errors.js";
+import type { Document } from "./document.js";
+import type { ParseSchemaString, SchemaOrString } from "./schema.js";
 
 export interface QueryOptions<Doc> {
   where: (doc: Doc) => boolean;
@@ -50,6 +50,6 @@ export type InferCollections<T extends Record<string, SchemaOrString>> = {
   [K in keyof T]: T[K] extends Schema.Schema<any, infer A>
     ? A
     : T[K] extends string
-    ? ParseSchemaString<T[K]>
-    : any;
+      ? ParseSchemaString<T[K]>
+      : any;
 };
