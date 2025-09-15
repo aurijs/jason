@@ -1,15 +1,18 @@
 import { FileSystem } from "@effect/platform";
-import { Effect, Ref } from "effect";
+import { Effect, Ref, Schema } from "effect";
 import { JsonService } from "../services/json.js";
-import type { CollectionMetadata } from "../types/metadata.js";
+import {
+  type CollectionMetadata,
+  CollectionMetadataSchema
+} from "../types/metadata.js";
 
 /**
  * Creates a MetadataService.
- * 
+ *
  * - `created_at` - The timestamp when the collection was created.
  * - `updated_at` - The timestamp when the collection was last updated.
  * - `document_count` - The number of documents in the collection.
- * 
+ *
  * @param metadata_path The path to the metadata file.
  * @returns A MetadataService.
  */
@@ -24,12 +27,14 @@ export const makeMetadata = (metadata_path: string) =>
     const metadata_ref = yield* Ref.make<CollectionMetadata>({
       created_at: new Date(),
       updated_at: new Date(),
-      document_count: 0
+      document_count: 0,
+      indexes: {}
     });
 
     yield* Effect.gen(function* () {
       const content = yield* fs.readFileString(metadata_path);
-      const metadata = yield* jsonService.parse(content);
+      const json = yield* jsonService.parse(content);
+      const metadata = yield* Schema.decode(CollectionMetadataSchema)(json);
       yield* Ref.set(metadata_ref, metadata);
     }).pipe(
       Effect.catchTag("SystemError", (error) =>
