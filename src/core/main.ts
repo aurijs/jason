@@ -1,5 +1,5 @@
 import { FileSystem } from "@effect/platform";
-import { NodeFileSystem } from "@effect/platform-node";
+import { BunFileSystem } from "@effect/platform-bun";
 import { Context, Effect, Layer, Runtime, Schema } from "effect";
 import { makeCollection } from "../services/collection.js";
 import type { Database, DatabaseEffect } from "../types/database.js";
@@ -28,7 +28,7 @@ function parseSchemaFromString(schema_string: string) {
   return Schema.Struct(fields);
 }
 
-const InfraLayer = Layer.merge(NodeFileSystem.layer, JsonLive);
+const InfraLayer = Layer.merge(BunFileSystem.layer, JsonLive);
 
 export const createJasonDBLayer = <
   const T extends Record<string, SchemaOrString>
