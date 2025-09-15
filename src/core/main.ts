@@ -56,7 +56,8 @@ export const createJasonDBLayer = <
 
         collection_services[name] = yield* makeCollection(
           collection_path,
-          schema
+          schema,
+          schema_or_string as string
         );
       }
 
