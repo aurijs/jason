@@ -5,12 +5,78 @@ import { makeMetadata } from "../layers/metadata.js";
 import type { QueryOptions } from "../types/collection.js";
 import { JsonService } from "./json.js";
 import { makeIndexService } from "../layers/index.js";
+import type { IndexDefinition } from "../types/metadata.js";
 
+/**
+ * Parses an index definition string into a structured format.
+ * Example input: "email:unique,age"
+ * @param index_string The index definition string.
+ * @returns A record of index definitions.
+ */
 function parseIndexString(index_string: string) {
-  return {};
+  const definitions: Record<string, IndexDefinition> = {};
+
+  if (!index_string.trim()) {
+    return definitions;
+  }
+
+  const parts = index_string.split(",").map((part) => part.trim());
+
+  for (const part of parts) {
+    let field_name = part;
+    const definition: IndexDefinition = {
+      unique: false,
+      multi_entry: false
+    };
+
+    // case 1: compound index (ex: "[field1+field2]")
+    if (part.startsWith("[") && part.endsWith("]")) {
+      field_name = part;
+      const compound_path = part.slice(1, -1).split("+");
+      definition.compound_path = compound_path;
+
+      // can be marked as unique with the "&" prefix
+      if (part.startsWith("&[")) {
+        definition.unique = true;
+        field_name = part.substring(2);
+      }
+
+      // case 2: primary key with auto-increment (ex: "++id")
+    } else if (part.startsWith("++")) {
+      field_name = part.substring(2);
+      definition.primary_key = true;
+      definition.unique = true;
+      definition.auto_increment = true;
+
+      // case 3: primary key with UUID (ex: "@id")
+    } else if (part.startsWith("@")) {
+      field_name = part.substring(1);
+      definition.primary_key = true;
+      definition.unique = true;
+      definition.uuid = true;
+
+      // case 4: unique index (ex: "&email")
+    } else if (part.startsWith("&")) {
+      field_name = part.substring(1);
+      definition.unique = true;
+
+      // case 5: multi-entry index (ex: "*tags")
+    } else if (part.startsWith("*")) {
+      field_name = part.substring(1);
+      definition.multi_entry = true;
+    }
+
+    if (/[&*[\]+@]/g.test(field_name)) {
+      throw new Error(`Invalid characters in index definition: ${part}`);
+    }
+
+    definitions[field_name] = definition;
+  }
+
+  return definitions;
 }
 
-export const makeCollection = <Doc extends { id: string }>(
+export const makeCollection = <Doc extends { id?: string }>(
   collection_path: string,
   schema: Schema.Schema<any, Doc>,
   index_string: string = ""
@@ -52,7 +118,7 @@ export const makeCollection = <Doc extends { id: string }>(
       )
     );
 
-    const create = (data: Omit<Doc, "id">) =>
+    const create = (data: Doc) =>
       Effect.gen(function* () {
         const id = crypto.randomUUID() as string;
         const document_path = `${collection_path}/${id}.json`;
