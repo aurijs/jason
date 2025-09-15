@@ -4,16 +4,30 @@ import { DatabaseError } from "../core/errors.js";
 import { makeMetadata } from "../layers/metadata.js";
 import type { QueryOptions } from "../types/collection.js";
 import { JsonService } from "./json.js";
+import { makeIndexService } from "../layers/index.js";
 
-export const makeCollection = <Document extends { id: string }>(
+function parseIndexString(index_string: string) {
+  return {};
+}
+
+export const makeCollection = <Doc extends { id: string }>(
   collection_path: string,
-  schema: Schema.Schema<any, Document>
+  schema: Schema.Schema<any, Doc>,
+  index_string: string = ""
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const jsonService = yield* JsonService;
-    const metadata_path = `${collection_path}/_metadata.json`;
-    const metadataService = yield* makeMetadata(metadata_path);
+    const IndexDefinitions = parseIndexString(index_string);
+
+    const indexService = yield* makeIndexService(
+      `${collection_path}/_indexes`,
+      IndexDefinitions,
+      schema
+    );
+    const metadataService = yield* makeMetadata(
+      `${collection_path}/_metadata.json`
+    );
 
     yield* fs.makeDirectory(collection_path, { recursive: true });
 
@@ -38,21 +52,25 @@ export const makeCollection = <Document extends { id: string }>(
       )
     );
 
-    const create = (data: Omit<Document, "id">) =>
+    const create = (data: Omit<Doc, "id">) =>
       Effect.gen(function* () {
-        const id = crypto.randomUUID();
+        const id = crypto.randomUUID() as string;
         const document_path = `${collection_path}/${id}.json`;
-        const document = { ...data, id };
+        const new_document = { ...data, id };
 
-        const encoded_content = yield* Schema.encode(schema)(document);
+        const encoded_content = yield* Schema.encode(schema)(new_document);
         const content = yield* jsonService.stringify({
           ...encoded_content,
           id
         });
         yield* fs.writeFileString(document_path, content);
 
-        yield* metadataService.incrementCount;
-        return document;
+        yield* Effect.all([
+          metadataService.incrementCount,
+          indexService.update(undefined, new_document)
+        ]);
+
+        return new_document;
       }).pipe(
         Effect.mapError(
           (cause) =>
@@ -81,25 +99,27 @@ export const makeCollection = <Document extends { id: string }>(
         )
       );
 
-    const update = (id: string, data: Partial<Document>) =>
+    const update = (id: string, data: Partial<Doc>) =>
       Effect.gen(function* () {
-        const existing_document = yield* findById(id);
-        if (!existing_document) return undefined;
+        const old_document = yield* findById(id);
+        if (!old_document) return undefined;
 
-        const updated_document = {
-          ...existing_document,
+        const new_document = {
+          ...old_document,
           ...data
         };
 
-        const validated_document =
-          yield* Schema.encode(schema)(updated_document);
+        const validated_document = yield* Schema.encode(schema)(new_document);
 
         const content = yield* jsonService.stringify(validated_document);
 
         yield* fs.writeFileString(`${collection_path}/${id}.json`, content);
 
-        yield* metadataService.touch;
-        return updated_document;
+        yield* Effect.all([
+          metadataService.touch,
+          indexService.update(old_document, new_document)
+        ]);
+        return new_document;
       }).pipe(
         Effect.mapError(
           (cause) =>
@@ -112,13 +132,15 @@ export const makeCollection = <Document extends { id: string }>(
 
     const deleteFn = (id: string) =>
       Effect.gen(function* () {
-        const file_path = `${collection_path}/${id}.json`;
-        const exist = yield* fs.exists(file_path);
-        if (!exist) return false;
+        const old_document = yield* findById(id);
+        if (!old_document) return false;
 
-        yield* fs.remove(file_path);
+        yield* fs.remove(`${collection_path}/${id}.json`);
 
-        yield* metadataService.decrementCount;
+        yield* Effect.all([
+          metadataService.decrementCount,
+          indexService.update(old_document, undefined)
+        ]);
         return true;
       }).pipe(
         Effect.mapError(
@@ -130,7 +152,7 @@ export const makeCollection = <Document extends { id: string }>(
         )
       );
 
-    const find = (options: QueryOptions<Document>) =>
+    const find = (options: QueryOptions<Doc>) =>
       loadAll.pipe(
         Effect.map((document) => {
           let results = document;
@@ -154,7 +176,7 @@ export const makeCollection = <Document extends { id: string }>(
         })
       );
 
-    const findStream = (options: QueryOptions<Document>) =>
+    const findStream = (options: QueryOptions<Doc>) =>
       Stream.fromEffect(fs.readDirectory(collection_path)).pipe(
         Stream.flatMap((files) => Stream.fromIterable(files)),
         Stream.mapEffect(
@@ -176,7 +198,7 @@ export const makeCollection = <Document extends { id: string }>(
         )
       );
 
-    const findOne = (options: QueryOptions<Document>) =>
+    const findOne = (options: QueryOptions<Doc>) =>
       find({ ...options, limit: 1 }).pipe(Effect.map((docs) => docs[0]));
 
     const count = metadataService.get.pipe(Effect.map((m) => m.document_count));
