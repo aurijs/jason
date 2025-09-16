@@ -1,17 +1,19 @@
 import { FileSystem } from "@effect/platform";
-import { BunFileSystem } from "@effect/platform-bun";
+import { BunContext } from "@effect/platform-bun";
 import { Context, Effect, Layer, Runtime, Schema } from "effect";
 import { ConfigLive } from "../layers/config.js";
+import { JsonFileLive } from "../layers/json-file.js";
 import { JsonLive } from "../layers/json.js";
 import { makeCollection } from "../services/collection.js";
 import { ConfigService } from "../services/config.js";
 import type {
   Collection,
   CollectionEffect,
-  InferCollections
+  InferCollections,
+  JasonDBConfig
 } from "../types/collection.js";
 import type { Database, DatabaseEffect } from "../types/database.js";
-import type { JasonDBConfig, SchemaOrString } from "../types/schema.js";
+import type { SchemaOrString } from "../types/schema.js";
 
 export class JasonDB extends Context.Tag("DatabaseService")<
   JasonDB,
@@ -25,7 +27,12 @@ export const createJasonDBLayer = <
 ) => {
   const ConfigLayer = ConfigLive(config);
 
-  const InfraLayer = Layer.mergeAll(BunFileSystem.layer, JsonLive, ConfigLayer);
+  const InfraLayer = Layer.mergeAll(
+    JsonFileLive,
+    BunContext.layer,
+    JsonLive,
+    ConfigLayer
+  );
 
   return Layer.scoped(
     JasonDB,
@@ -42,23 +49,6 @@ export const createJasonDBLayer = <
           collection_names.map((name) => [name, makeCollection(name)])
         )
       );
-
-      // for (const name in config.collections) {
-      //   const schema_or_string = config.collections[name];
-      //   const schema =
-      //     typeof schema_or_string === "string"
-      //       ? parseSchemaFromString(schema_or_string)
-      //       : (schema_or_string as Schema.Schema<any, any>);
-
-      //   const collection_path = `${base_path}/${name}`;
-      //   yield* fs.makeDirectory(collection_path, { recursive: true });
-
-      //   collection_services[name] = yield* makeCollection(
-      //     collection_path,
-      //     schema,
-      //     schema_or_string as string
-      //   );
-      // }
 
       type CollectionsSchema = {
         [K in keyof T]: T[K] extends Schema.Schema<any, infer A> ? A : any;
@@ -79,13 +69,13 @@ export const createJasonDBLayer = <
  * @param run A function that takes an Effect and returns a Promise of the Effect's result.
  * @returns A Record where each key is a function that returns a Promise of the Effect's result.
  */
-function createPromiseClient(
-  effect_service: CollectionEffect<any>,
+function createPromiseClient<Doc>(
+  effect_service: CollectionEffect<Doc>,
   run: (effect: Effect.Effect<any, any, any>) => Promise<any>
-): Collection<any> {
+): Collection<Doc> {
   const promise_client: any = {};
 
-  (Object.keys(effect_service) as Array<keyof CollectionEffect<any>>).forEach(
+  (Object.keys(effect_service) as Array<keyof CollectionEffect<Doc>>).forEach(
     (key) => {
       const prop = effect_service[key];
 
@@ -111,16 +101,20 @@ export const createJasonDB = async <
     Layer.toRuntime(layer).pipe(Effect.scoped)
   );
   const run = Runtime.runPromise(runtime);
-  const effect_base_db = await run(JasonDB);
-  const promise_based_collection: Record<string, Collection<any>> = {};
+
+  const effect_base_db = (await run(JasonDB)) as DatabaseEffect<
+    InferCollections<T>
+  >;
+
+  const promise_based_collection: {
+    [K in keyof InferCollections<T>]: Collection<InferCollections<T>[K]>;
+  } = {} as any;
 
   for (const name in effect_base_db.collections) {
     const effect_based_collection = effect_base_db.collections[name];
 
-    promise_based_collection[name] = createPromiseClient(
-      effect_based_collection,
-      run
-    );
+    promise_based_collection[name as keyof typeof promise_based_collection] =
+      createPromiseClient(effect_based_collection, run);
   }
 
   const promise_based_db = {
