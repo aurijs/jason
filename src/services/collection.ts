@@ -1,45 +1,41 @@
 import { FileSystem } from "@effect/platform";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { DatabaseError } from "../core/errors.js";
 import { makeIndexService } from "../layers/index.js";
 import { makeMetadata } from "../layers/metadata.js";
 import type { Filter, QueryOptions } from "../types/collection.js";
 import type { IndexDefinition } from "../types/metadata.js";
 import { ConfigService } from "./config.js";
-import { JsonService } from "./json.js";
+import { JsonFileService } from "./json-file.js";
 
-export const makeCollection = <Doc extends { id?: string }>(
-  collection_name: string
-) =>
+export const makeCollection = <Doc>(collection_name: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const jsonService = yield* JsonService;
+    const jsonFile = yield* JsonFileService;
     const config = yield* ConfigService;
 
     const schema = yield* config.getCollectionSchema(collection_name);
     const IndexDefinitions = yield* config.getIndexDefinitions(collection_name);
+    const collection_path = yield* config.getBasePath;
 
     const indexService = yield* makeIndexService(collection_name);
     const metadataService = yield* makeMetadata(
-      `${collection_name}/_metadata.json`
+      `${collection_path}/_metadata.json`
     );
 
     yield* fs.makeDirectory(collection_name, { recursive: true });
 
     const loadAll = Effect.gen(function* () {
-      const files = yield* fs.readDirectory(collection_name);
+      const files = yield* Effect.succeed([]);
 
       const docs = yield* Effect.all(
         files
           .filter((file) => !file.startsWith("_"))
           .map((file) =>
-            fs.readFileString(`${collection_name}/${file}`).pipe(
-              Effect.flatMap(jsonService.parse),
-              Effect.flatMap((json) => Schema.decode(schema)(json))
-            )
+            jsonFile.readJsonFile(`${collection_path}/${file}`, schema)
           )
       );
-      return docs;
+      return docs as Doc[];
     }).pipe(
       Effect.mapError(
         (cause) =>
@@ -47,18 +43,13 @@ export const makeCollection = <Doc extends { id?: string }>(
       )
     );
 
-    const create = (data: Doc) =>
+    const create = (data: Omit<Doc, "id">) =>
       Effect.gen(function* () {
         const id = crypto.randomUUID() as string;
-        const document_path = `${collection_name}/${id}.json`;
-        const new_document = { ...data, id };
+        const document_path = `${collection_path}/${id}.json`;
+        const new_document = { ...data, id } as Doc;
 
-        const encoded_content = yield* Schema.encode(schema)(new_document);
-        const content = yield* jsonService.stringify({
-          ...encoded_content,
-          id
-        });
-        yield* fs.writeFileString(document_path, content);
+        yield* jsonFile.writeJsonFile(document_path, schema, new_document);
 
         yield* Effect.all([
           metadataService.incrementCount,
@@ -74,14 +65,7 @@ export const makeCollection = <Doc extends { id?: string }>(
       );
 
     const findById = (id: string) =>
-      Effect.gen(function* () {
-        const document_path = `${collection_name}/${id}.json`;
-        const data = yield* fs.readFileString(document_path);
-        const json = yield* jsonService.parse(data);
-        const document = yield* Schema.decode(schema)(json);
-
-        return document;
-      }).pipe(
+      jsonFile.readJsonFile(`${collection_path}/${id}.json`, schema).pipe(
         Effect.catchTag("SystemError", (e) =>
           e.reason === "NotFound" ? Effect.succeed(undefined) : Effect.fail(e)
         ),
@@ -102,13 +86,13 @@ export const makeCollection = <Doc extends { id?: string }>(
         const new_document = {
           ...old_document,
           ...data
-        };
+        } as Doc;
 
-        const validated_document = yield* Schema.encode(schema)(new_document);
-
-        const content = yield* jsonService.stringify(validated_document);
-
-        yield* fs.writeFileString(`${collection_name}/${id}.json`, content);
+        yield* jsonFile.writeJsonFile(
+          `${collection_path}/${id}.json`,
+          schema,
+          new_document
+        );
 
         yield* Effect.all([
           metadataService.touch,
@@ -130,7 +114,7 @@ export const makeCollection = <Doc extends { id?: string }>(
         const old_document = yield* findById(id);
         if (!old_document) return false;
 
-        yield* fs.remove(`${collection_name}/${id}.json`);
+        yield* fs.remove(`${collection_path}/${id}.json`);
 
         yield* Effect.all([
           metadataService.decrementCount,
@@ -221,28 +205,6 @@ export const makeCollection = <Doc extends { id?: string }>(
         return final_results.slice(skip, skip + limit);
       });
 
-    // const findStream = (options: QueryOptions<Doc>) =>
-    //   Stream.fromEffect(fs.readDirectory(collection_path)).pipe(
-    //     Stream.flatMap((files) => Stream.fromIterable(files)),
-    //     Stream.mapEffect(
-    //       (file) =>
-    //         fs.readFileString(`${collection_path}/${file}`).pipe(
-    //           Effect.flatMap(jsonService.parse),
-    //           Effect.flatMap((json) => Schema.decode(schema)(json))
-    //         ),
-    //       { concurrency: 16 }
-    //     ),
-    //     (stream) =>
-    //       options.where ? Stream.filter(stream, options.where) : stream,
-    //     Stream.mapError(
-    //       (cause) =>
-    //         new DatabaseError({
-    //           message: "Failed during stream operation",
-    //           cause
-    //         })
-    //     )
-    //   );
-
     const findOne = (options: QueryOptions<Doc>) =>
       find({ ...options, limit: 1 }).pipe(Effect.map((docs) => docs[0]));
 
@@ -256,7 +218,6 @@ export const makeCollection = <Doc extends { id?: string }>(
       delete: deleteFn,
       find,
       findOne,
-      // findStream,
       count,
       getMetadata
     };

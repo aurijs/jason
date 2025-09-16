@@ -1,5 +1,6 @@
 import { Context, Effect } from "effect";
 import { JsonError } from "../core/errors.js";
+import type { JsonifiedObject, Stringified } from "../types/json.js";
 
 export class JsonService extends Context.Tag("JsonService")<
   JsonService,
@@ -9,13 +10,17 @@ export class JsonService extends Context.Tag("JsonService")<
      * @param text - JSON string
      * @returns parsed JSON
      */
-    readonly parse: (text: string) => Effect.Effect<any, JsonError>;
+    readonly parse: <T>(
+      text: Stringified<T>
+    ) => Effect.Effect<JsonifiedObject<T>, JsonError>;
 
     /**
      * Stringify object to JSON string
      * @param data - JSON object
      * @returns JSON string
      */
-    readonly stringify: (data: unknown) => Effect.Effect<string, JsonError>;
+    readonly stringify: <T>(
+      data: T
+    ) => Effect.Effect<Stringified<T>, JsonError>;
   }
 >() {}
