@@ -3,12 +3,16 @@ import type { DatabaseError } from "../core/errors.js";
 import type { Document } from "./document.js";
 import type { ParseSchemaString, SchemaOrString } from "./schema.js";
 
-export interface QueryOptions<Doc> {
-  where: (doc: Doc) => boolean;
-  order_by?: {
-    field: keyof Doc;
-    order: "asc" | "desc";
-  };
+export type Filter<Doc> = Partial<Doc>;
+
+interface OrderBy<Doc> {
+  field: keyof Doc;
+  order: "asc" | "desc";
+}
+
+export interface QueryOptions<Doc extends { id?: string }> {
+  where: Filter<Doc>;
+  order_by?: OrderBy<Doc>;
   skip?: number;
   limit?: number;
 }

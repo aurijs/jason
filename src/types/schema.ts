@@ -7,18 +7,27 @@ export type TypeMap = {
   date: Date;
   any: any;
   unknown: unknown;
+  null: null;
+  array: any[];
+  object: object;
+  bigint: bigint;
+  symbol: symbol;
+  undefined: undefined;
+  record: Record<string, any>;
 };
 
 export type CleanKey<T extends string> = T extends
   | `++${infer K}`
   | `&${infer K}`
   | `*${infer K}`
-    /**
+  | `@${infer K}`
+  | `[${infer K}]`
+  ? /**
      * Remove the special prefix from a key.
      * This is used to create a key that is valid for JSON Schema.
      */
-    ? K
-    : T;
+    K
+  : T;
 
 export type ParseField<T extends string> =
   /**
@@ -26,12 +35,12 @@ export type ParseField<T extends string> =
    * Examples: "name:string", "age:number"
    */
   T extends `${infer Key}:${infer TypeName}`
-    /**
-     * If the type is a valid type,
-     * return an object with the key and the type.
-     * Otherwise, return an object with the key and type `any`.
-     */
-    ? TypeName extends keyof TypeMap
+    ? /**
+       * If the type is a valid type,
+       * return an object with the key and the type.
+       * Otherwise, return an object with the key and type `any`.
+       */
+      TypeName extends keyof TypeMap
       ? { [K in CleanKey<Key>]: TypeMap[TypeName] }
       : { [K in CleanKey<Key>]: any }
     : { [K in CleanKey<T>]: string };
@@ -39,14 +48,14 @@ export type ParseField<T extends string> =
 export type Split<S extends string, D extends string> = string extends S
   ? string[]
   : S extends ""
-  ? []
-  /**
-   * Split a string into an array of strings using a delimiter.
-   * Examples: "name,string,age:number" => ["name", "string", "age", "number"]
-   */
-  : S extends `${infer T}${D}${infer U}`
-  ? [T, ...Split<U, D>]
-  : [S];
+    ? []
+    : /**
+       * Split a string into an array of strings using a delimiter.
+       * Examples: "name,string,age:number" => ["name", "string", "age", "number"]
+       */
+      S extends `${infer T}${D}${infer U}`
+      ? [T, ...Split<U, D>]
+      : [S];
 
 /**
  * Convert a union type to an intersection type.
@@ -66,10 +75,9 @@ export type ParseSchemaString<T extends string> = UnionToIntersection<
   ParseField<Split<T, ",">[number]>
 >;
 
-export type SchemaOrString = Schema.Schema<any, any> | string;
+export type SchemaOrString = Schema.Struct<any> | string;
 
 export interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
-  readonly path: string;
+  readonly base_path: string;
   readonly collections: T;
 }
-
