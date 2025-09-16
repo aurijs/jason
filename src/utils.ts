@@ -34,7 +34,7 @@ export function parseIndexString(index_string: string) {
     return definitions;
   }
 
-  const parts = index_string.split(",").map((part) => part.trim());
+  const parts = index_string.split(";").map((part) => part.trim());
 
   for (const part of parts) {
     let field_name = part;
