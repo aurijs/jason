@@ -28,6 +28,8 @@ export const makeBtreeService = <K, V>(
     const node_schema = BTreeNodeSchema(key_schema);
     const root_pointer_path = `${three_path}/_root.json`;
 
+    yield* fs.makeDirectory(three_path, { recursive: true });
+
     const createNode = (is_leaf: boolean) =>
       Effect.sync(
         () =>
@@ -167,7 +169,7 @@ export const makeBtreeService = <K, V>(
         }
       });
 
-    const insert = (key: K, value: string) =>
+    const insert = (key: K, value?: string) =>
       Effect.gen(function* () {
         const root_id = yield* Ref.get(rootIdRef);
         let root = yield* readNode(root_id);

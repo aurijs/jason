@@ -1,21 +1,22 @@
-import { Effect, Schema } from "effect";
-import type { IndexDefinition } from "../types/metadata.js";
+import { Effect } from "effect";
+import { ConfigService } from "../services/config.js";
 import { makeBtreeService } from "./btree.js";
 
-export const makeIndexService = <Doc extends { id: string }>(
-  index_path: string,
-  index_definitions: Record<string, IndexDefinition>,
-  doc_schema: Schema.Schema<any, Doc>
+export const makeIndexService = <Doc extends { id?: string }>(
+  index_name: string
 ) =>
   Effect.gen(function* () {
+    const config = yield* ConfigService;
+
+    const doc_schema = yield* config.getCollectionSchema(index_name);
+    const index_definitions = yield* config.getIndexDefinitions(index_name);
+
     // For each field that needs being indexed, create a
     // B-tree service instance
     const btree_services = yield* Effect.all(
       Object.fromEntries(
         Object.entries(index_definitions).map(([field_name]) => {
-          const key_schema = (doc_schema as Schema.Struct<any>).fields[
-            field_name
-          ];
+          const key_schema = doc_schema.fields[field_name];
           if (!key_schema) {
             throw new Error(
               `Field ${field_name} does not exist in document schema`
@@ -23,7 +24,7 @@ export const makeIndexService = <Doc extends { id: string }>(
           }
 
           const btree_service_effect = makeBtreeService(
-            `${index_path}/${field_name}`,
+            `${index_name}/${field_name}`,
             key_schema,
             8 // B-tree order
           );
@@ -60,7 +61,7 @@ export const makeIndexService = <Doc extends { id: string }>(
             // The key is the value of the field (ex: 'test@email.com')
             // The value is always the main document ID.
             if (new_value !== undefined) {
-              yield* btree.insert(new_value as any, new_doc!.id);
+              yield* btree.insert(new_value as any, new_doc?.id);
             }
           }),
         { discard: true, concurrency: "inherit" }

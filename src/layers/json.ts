@@ -2,6 +2,10 @@ import { Layer, Effect } from "effect";
 import { JsonService } from "../services/json.js";
 import { JsonError } from "../core/errors.js";
 
+interface JSON {
+  
+}
+
 export const JsonLive = Layer.succeed(
   JsonService,
   JsonService.of({
