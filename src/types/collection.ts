@@ -1,6 +1,5 @@
 import { Schema, type Effect, type Stream } from "effect";
 import type { DatabaseError } from "../core/errors.js";
-import type { Document } from "./document.js";
 import type { ParseSchemaString, SchemaOrString } from "./schema.js";
 
 export type Filter<Doc> = Partial<Doc>;
@@ -10,20 +9,20 @@ interface OrderBy<Doc> {
   order: "asc" | "desc";
 }
 
-export interface QueryOptions<Doc extends { id?: string }> {
+export interface QueryOptions<Doc> {
   where: Filter<Doc>;
   order_by?: OrderBy<Doc>;
   skip?: number;
   limit?: number;
 }
 
-export interface CollectionEffect<Doc extends Document> {
-  readonly create: (data: Omit<Doc, "id">) => Effect.Effect<Document, Error>;
-  readonly findById: (id: string) => Effect.Effect<Doc, Error>;
+export interface CollectionEffect<Doc> {
+  readonly create: (data: Omit<Doc, "id">) => Effect.Effect<Doc, Error>;
+  readonly findById: (id: string) => Effect.Effect<Doc | undefined, Error>;
   readonly update: (
     id: string,
     data: Partial<Omit<Doc, "id">>
-  ) => Effect.Effect<Doc, DatabaseError>;
+  ) => Effect.Effect<Doc | undefined, DatabaseError>;
   readonly delete: (id: string) => Effect.Effect<boolean, DatabaseError>;
   readonly find: (options: QueryOptions<Doc>) => Effect.Effect<Doc[], Error>;
   readonly findStream: (
@@ -31,7 +30,7 @@ export interface CollectionEffect<Doc extends Document> {
   ) => Stream.Stream<Doc, DatabaseError>;
 }
 
-export interface Collection<Doc extends Document> {
+export interface Collection<Doc> {
   /**
    * Creates a new document in the collection
    * @param data - The data to be stored in the document
@@ -57,3 +56,8 @@ export type InferCollections<T extends Record<string, SchemaOrString>> = {
       ? ParseSchemaString<T[K]>
       : any;
 };
+
+export interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
+  readonly base_path: string;
+  readonly collections: T;
+}
