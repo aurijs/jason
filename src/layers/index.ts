@@ -8,6 +8,7 @@ export const makeIndexService = <Doc extends { id?: string }>(
   Effect.gen(function* () {
     const config = yield* ConfigService;
 
+    const collection_path = yield* config.getCollectionPath(index_name);
     const doc_schema = yield* config.getCollectionSchema(index_name);
     const index_definitions = yield* config.getIndexDefinitions(index_name);
 
@@ -24,7 +25,7 @@ export const makeIndexService = <Doc extends { id?: string }>(
           }
 
           const btree_service_effect = makeBtreeService(
-            `${index_name}/${field_name}`,
+            `${collection_path}/${field_name}`,
             key_schema,
             8 // B-tree order
           );
