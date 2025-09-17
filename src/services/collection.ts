@@ -8,25 +8,26 @@ import type { IndexDefinition } from "../types/metadata.js";
 import { ConfigService } from "./config.js";
 import { JsonFileService } from "./json-file.js";
 
-export const makeCollection = <Doc>(collection_name: string) =>
+export const makeCollection = <Doc extends Record<string, any>>(
+  collection_name: string
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const jsonFile = yield* JsonFileService;
     const config = yield* ConfigService;
-
+    
     const schema = yield* config.getCollectionSchema(collection_name);
     const IndexDefinitions = yield* config.getIndexDefinitions(collection_name);
-    const collection_path = yield* config.getBasePath;
-
+    const collection_path = yield* config.getCollectionPath(collection_name);
+    
+    yield* fs.makeDirectory(collection_path, { recursive: true });
+    
     const indexService = yield* makeIndexService(collection_name);
-    const metadataService = yield* makeMetadata(
-      `${collection_path}/_metadata.json`
-    );
+    const metadataService = yield* makeMetadata(collection_name);
 
-    yield* fs.makeDirectory(collection_name, { recursive: true });
 
     const loadAll = Effect.gen(function* () {
-      const files = yield* Effect.succeed([]);
+      const files = yield* fs.readDirectory(collection_path);
 
       const docs = yield* Effect.all(
         files
@@ -43,8 +44,9 @@ export const makeCollection = <Doc>(collection_name: string) =>
       )
     );
 
-    const create = (data: Omit<Doc, "id">) =>
+    const create = (data: Doc) =>
       Effect.gen(function* () {
+        
         const id = crypto.randomUUID() as string;
         const document_path = `${collection_path}/${id}.json`;
         const new_document = { ...data, id } as Doc;
@@ -65,18 +67,13 @@ export const makeCollection = <Doc>(collection_name: string) =>
       );
 
     const findById = (id: string) =>
-      jsonFile.readJsonFile(`${collection_path}/${id}.json`, schema).pipe(
-        Effect.catchTag("SystemError", (e) =>
-          e.reason === "NotFound" ? Effect.succeed(undefined) : Effect.fail(e)
-        ),
-        Effect.mapError(
-          (cause) =>
-            new DatabaseError({
-              message: `Failed to find document ${id}`,
-              cause
-            })
-        )
-      );
+      jsonFile
+        .readJsonFile(`${collection_path}/${id}.json`, schema)
+        .pipe(
+          Effect.catchTag("SystemError", (e) =>
+            e.reason === "NotFound" ? Effect.succeed(undefined) : Effect.fail(e)
+          )
+        );
 
     const update = (id: string, data: Partial<Doc>) =>
       Effect.gen(function* () {
@@ -136,7 +133,9 @@ export const makeCollection = <Doc>(collection_name: string) =>
       definitions: Record<string, IndexDefinition>
     ) {
       for (const field in where) {
+        // Check if the current field from the 'where' clause has an associated index definition.
         if (Object.prototype.hasOwnProperty.call(definitions, field)) {
+          // If an index is found for this field, return a plan to use this index.
           return {
             type: "index" as const, // the "as const" helps with inference
             field: field as keyof Doc,
@@ -145,6 +144,8 @@ export const makeCollection = <Doc>(collection_name: string) =>
         }
       }
 
+      // If no suitable index is found for any field in the 'where' clause,
+      // return a plan indicating that a full scan of the collection is necessary.
       return { type: "full-scan" as const };
     }
 
@@ -156,9 +157,6 @@ export const makeCollection = <Doc>(collection_name: string) =>
           const plan = findBestIndex(options.where, IndexDefinitions);
 
           if (plan.type === "index") {
-            console.log(
-              `[Query Planner]: Usando índice no campo "${String(plan.field)}"`
-            );
             const ids = yield* indexService.findIds(
               String(plan.field),
               plan.value
@@ -168,9 +166,6 @@ export const makeCollection = <Doc>(collection_name: string) =>
               (doc): doc is Doc => doc !== undefined
             );
           } else {
-            console.log(
-              "[Query Planner]: Nenhum índice encontrado, fazendo varredura completa"
-            );
             initial_docs = yield* loadAll;
           }
         } else {
