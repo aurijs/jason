@@ -1,5 +1,7 @@
 import { FileSystem } from "@effect/platform";
-import { Effect, Ref, Schema } from "effect";
+import { Effect, Ref } from "effect";
+import { ConfigService } from "../services/config.js";
+import { JsonFileService } from "../services/json-file.js";
 import { JsonService } from "../services/json.js";
 import {
   type CollectionMetadata,
@@ -13,13 +15,16 @@ import {
  * - `updated_at` - The timestamp when the collection was last updated.
  * - `document_count` - The number of documents in the collection.
  *
- * @param metadata_path The path to the metadata file.
+ * @param collection_name The path to the metadata file.
  * @returns A MetadataService.
  */
-export const makeMetadata = (metadata_path: string) =>
+export const makeMetadata = (collection_name: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const jsonService = yield* JsonService;
+    const jsonFile = yield* JsonFileService;
+    const config = yield* ConfigService;
+    const metadata_path = yield* config.getMetadataPath(collection_name);
 
     /**
      * The metadata reference.
@@ -32,16 +37,23 @@ export const makeMetadata = (metadata_path: string) =>
     });
 
     yield* Effect.gen(function* () {
-      const content = yield* fs.readFileString(metadata_path);
-      const json = yield* jsonService.parse(content);
-      const metadata = yield* Schema.decode(CollectionMetadataSchema)(json);
+      const metadata = yield* jsonFile.readJsonFile(
+        metadata_path,
+        CollectionMetadataSchema
+      );
+
       yield* Ref.set(metadata_ref, metadata);
     }).pipe(
       Effect.catchTag("SystemError", (error) =>
         error.reason === "NotFound"
           ? Ref.get(metadata_ref).pipe(
-              Effect.flatMap((m) => jsonService.stringify(m)),
-              Effect.flatMap((s) => fs.writeFileString(metadata_path, s))
+              Effect.flatMap((initial_metadata) =>
+                jsonFile.writeJsonFile(
+                  metadata_path,
+                  CollectionMetadataSchema,
+                  initial_metadata
+                )
+              )
             )
           : Effect.fail(error)
       )
