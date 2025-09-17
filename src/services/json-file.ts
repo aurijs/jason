@@ -1,5 +1,7 @@
+import type { PlatformError } from "@effect/platform/Error";
 import { Context, type Effect, type Schema } from "effect";
-import type { DatabaseError } from "../core/errors.js";
+import type { ParseError } from "effect/ParseResult";
+import type { JsonError } from "../core/errors.js";
 
 export interface IJsonFileService {
   /**
@@ -11,7 +13,7 @@ export interface IJsonFileService {
   readonly readJsonFile: <A, I>(
     path: string,
     schema: Schema.Schema<A, I>
-  ) => Effect.Effect<A, DatabaseError>;
+  ) => Effect.Effect<A, ParseError | JsonError | PlatformError>;
 
   /**
    * Encode and serialize an object to a JSON string
@@ -21,7 +23,7 @@ export interface IJsonFileService {
     path: string,
     schema: Schema.Schema<A, I>,
     data: A
-  ) => Effect.Effect<void, DatabaseError>;
+  ) => Effect.Effect<void, ParseError | JsonError | PlatformError>;
 }
 
 export class JsonFileService extends Context.Tag("JsonFileService")<

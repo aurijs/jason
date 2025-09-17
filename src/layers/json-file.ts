@@ -1,11 +1,10 @@
+import { FileSystem } from "@effect/platform";
+import { BunFileSystem } from "@effect/platform-bun";
 import { Effect, Layer, Schema } from "effect";
 import { JsonFileService } from "../services/json-file.js";
-import { FileSystem } from "@effect/platform";
 import { JsonService } from "../services/json.js";
 import type { Stringified } from "../types/json.js";
-import { DatabaseError } from "../core/errors.js";
 import { JsonLive } from "./json.js";
-import { BunFileSystem } from "@effect/platform-bun";
 
 export const JsonFileLive = Layer.effect(
   JsonFileService,
@@ -17,14 +16,7 @@ export const JsonFileLive = Layer.effect(
       fs.readFileString(path).pipe(
         Effect.map((text) => text as Stringified<A>),
         Effect.flatMap(json.parse),
-        Effect.flatMap((parsedJson) => Schema.decode(schema)(parsedJson as I)),
-        Effect.mapError(
-          (cause) =>
-            new DatabaseError({
-              message: `Failed to read JSON File: ${path}`,
-              cause: cause instanceof Error ? cause : new Error(String(cause))
-            })
-        )
+        Effect.flatMap((parsedJson) => Schema.decode(schema)(parsedJson as I))
       );
 
     const writeJsonFile = <A, I>(
@@ -35,14 +27,7 @@ export const JsonFileLive = Layer.effect(
       Schema.encode(schema)(data).pipe(
         Effect.flatMap(json.stringify),
         Effect.flatMap((content) => fs.writeFileString(path, content)),
-        Effect.asVoid,
-        Effect.mapError(
-          (cause) =>
-            new DatabaseError({
-              message: `Failed to write JSON File: ${path}`,
-              cause: cause instanceof Error ? cause : new Error(String(cause))
-            })
-        )
+        Effect.asVoid
       );
 
     return {
