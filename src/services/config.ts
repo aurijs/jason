@@ -43,6 +43,14 @@ export interface IConfigService {
   readonly getIndexDefinitions: (
     collection_name: string
   ) => Effect.Effect<Record<string, IndexDefinition>, never>;
+
+  /**
+   * @param collection_name - The name of the collection
+   * @return The path for the metadata
+   */
+  readonly getMetadataPath: (
+    collection_name: string
+  ) => Effect.Effect<string, never>;
 }
 
 export class ConfigService extends Context.Tag("ConfigService")<

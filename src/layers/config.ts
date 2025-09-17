@@ -39,7 +39,11 @@ export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
             const index_string =
               typeof schema_or_string === "string" ? schema_or_string : "";
             return parseIndexString(index_string);
-          })
+          }),
+        getMetadataPath: (collection_name) =>
+          Effect.succeed(
+            path.join(config.base_path, collection_name, "_metadata.json")
+          )
       });
     }).pipe(Effect.provide(BunContext.layer))
   );
