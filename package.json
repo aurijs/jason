@@ -12,7 +12,8 @@
     "prebuild": "bun run clean",
     "publish": "npm publish",
     "prepublish": "bun run build",
-    "version": "conventional-changelog -p jquery -i CHANGELOG.md -s"
+    "version": "conventional-changelog -p jquery -i CHANGELOG.md -s",
+    "circular": "bun run scripts/circular.js"
   },
   "exports": {
     ".": {
@@ -61,7 +62,7 @@
     "async-mutex": "^0.5.0",
     "devalue": "^5.3.2",
     "effect": "^3.17.13",
-    "oxlint": "^1.15.0",
+    "oxlint": "^1.16.0",
     "tsup": "^8.5.0",
     "vitest": "^3.2.4"
   },
@@ -71,8 +72,10 @@
   "dependencies": {
     "@effect/platform-bun": "^0.79.0",
     "@prettier/plugin-oxc": "^0.0.4",
-    "@typescript/native-preview": "^7.0.0-dev.20250915.1",
+    "@types/madge": "^5.0.3",
+    "@typescript/native-preview": "^7.0.0-dev.20250917.1",
     "eslint": "^9.35.0",
+    "madge": "^8.0.0",
     "prettier": "^3.6.2"
   }
 }

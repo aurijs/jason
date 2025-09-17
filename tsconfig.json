@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    // Enable latest features
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "module": "NodeNext",
@@ -10,21 +9,16 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": true,
-    // Bundler mode
     "moduleResolution": "nodenext",
-    // "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    // "noEmit": true,
-    // Best practices
+    "skipDefaultLibCheck": true,
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
-    // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "exactOptionalPropertyTypes": true,
-    "types": ["vitest/globals"],
     "plugins": [
       {
         "name": "@effect/language-service"
