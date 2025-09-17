@@ -1,20 +1,61 @@
 import { Schema } from "effect";
 import type { IndexDefinition } from "./types/metadata.js";
 
+const schema_map = {
+  string: Schema.String,
+  number: Schema.Number,
+  boolean: Schema.Boolean,
+  date: Schema.Date,
+  any: Schema.Any,
+  unknown: Schema.Unknown,
+  null: Schema.Null,
+  bigint: Schema.BigInt
+};
+
 /**
  * Parses a schema string into a structured format.
  * @param schema_string A string representing the schema, e.g., "id, name, age"
  * @returns A Schema.Struct representing the parsed schema.
  */
 export function parseSchemaFromString(schema_string: string) {
-  const fields = schema_string.split(",").reduce(
-    (acc, field) => {
-      const field_name = field.replace(/^\+\+|[&*]/, "");
-      acc[field_name] = Schema.Any;
-      return acc;
-    },
-    {} as Record<string, Schema.Schema<any, any>>
-  );
+  const fields: any = {};
+
+  const parts = schema_string.split(";");
+  for (const part of parts) {
+    if (!part) continue;
+
+    if (part.startsWith("[") && part.endsWith("]")) continue;
+
+    let field_definition = part;
+    let type_name = "string" as keyof typeof schema_map; // default type
+
+    if (part.includes(":")) {
+      const [def, type] = part.split(":", 2);
+      field_definition = def;
+      type_name = type as any;
+    }
+
+    const is_multi_entry = field_definition.startsWith("*");
+    const is_primary_key_auto_inc = field_definition.startsWith("++");
+    const is_primary_key_uuid = field_definition.startsWith("@");
+
+    if (is_primary_key_auto_inc) {
+      type_name = "number";
+    }
+    if (is_primary_key_uuid) {
+      type_name = "string";
+    }
+
+    const clean_field_name = field_definition.replace(/^[++@&*]/, "");
+    let field_schema = schema_map[type_name] ?? Schema.Any;
+
+    if (is_multi_entry) {
+      field_schema = Schema.Array(field_schema);
+    }
+
+    fields[clean_field_name] = field_schema;
+  }
+
   return Schema.Struct(fields);
 }
 
