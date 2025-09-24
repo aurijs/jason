@@ -4,7 +4,14 @@ import { Effect, Layer } from "effect";
 import { ConfigService } from "../services/config.js";
 import type { JasonDBConfig } from "../types/collection.js";
 import type { SchemaOrString } from "../types/schema.js";
-import { parseIndexString, parseSchemaFromString } from "../utils.js";
+import {
+  extractIndexDefinitions,
+  parseSchemaFromString,
+  generateSchemaFromDefinitions,
+  parseSchemaString,
+  buildIndexDefinitions,
+  buildSchema
+} from "../utils.js";
 
 export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
   config: JasonDBConfig<T>
@@ -13,6 +20,30 @@ export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
     ConfigService,
     Effect.gen(function* () {
       const path = yield* Path.Path;
+
+      const all_parsed_fields = Object.fromEntries(
+        Object.entries(config.collections).map(([name, schema]) => [
+          name,
+          typeof schema === "string" ? parseSchemaString(schema) : []
+        ])
+      );
+
+      const all_index_definitions = Object.fromEntries(
+        Object.entries(all_parsed_fields).map(([name, parsed]) => [
+          name,
+          buildIndexDefinitions(parsed)
+        ])
+      );
+
+      const all_schemas = Object.fromEntries(
+        Object.entries(config.collections).map(([name, schemaOrString]) => {
+          if (typeof schemaOrString === "string") {
+            return [name, buildSchema(all_parsed_fields[name])];
+          }
+          return [name, schemaOrString];
+        })
+      );
+
       return ConfigService.of({
         getBasePath: Effect.succeed(config.base_path),
         getCollectionNames: Effect.succeed(Object.keys(config.collections)),
@@ -23,23 +54,9 @@ export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
             path.join(config.base_path, collection_name, "_indexes")
           ),
         getCollectionSchema: (collection_name) =>
-          Effect.sync(() => {
-            const schema_or_string = config.collections[collection_name];
-
-            const schema =
-              typeof schema_or_string === "string"
-                ? parseSchemaFromString(schema_or_string)
-                : schema_or_string;
-
-            return schema;
-          }),
+          Effect.succeed(all_schemas[collection_name]),
         getIndexDefinitions: (collection_name) =>
-          Effect.sync(() => {
-            const schema_or_string = config.collections[collection_name];
-            const index_string =
-              typeof schema_or_string === "string" ? schema_or_string : "";
-            return parseIndexString(index_string);
-          }),
+          Effect.succeed(all_index_definitions[collection_name]),
         getMetadataPath: (collection_name) =>
           Effect.succeed(
             path.join(config.base_path, collection_name, "_metadata.json")

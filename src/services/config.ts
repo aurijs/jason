@@ -3,6 +3,7 @@ import type { IndexDefinition } from "../types/metadata.js";
 
 // A interface that define the "capacities" of our config service
 export interface IConfigService {
+  
   /** @return the database path */
   readonly getBasePath: Effect.Effect<string, never>;
 
