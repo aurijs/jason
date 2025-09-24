@@ -1,7 +1,10 @@
 import type { Schema } from "effect";
 
+/** Trim left space from a string */
 type TrimLeft<T extends string> = T extends ` ${infer R}` ? TrimLeft<R> : T;
+/** Trim right space from a string */
 type TrimRight<T extends string> = T extends `${infer R} ` ? TrimRight<R> : T;
+/** Trim left and right space from a string */
 type Trim<T extends string> = TrimLeft<TrimRight<T>>;
 
 export type TypeMap = {
@@ -15,10 +18,13 @@ export type TypeMap = {
   bigint: bigint;
 };
 
+/**
+ * Parse a type string into a TypeScript type.
+ */
 type ParseType<T extends string> =
   Trim<T> extends keyof TypeMap
     ? TypeMap[Trim<T>]
-    : Trim<T> extends `array<${infer Inner}`
+    : Trim<T> extends `array<${infer Inner}>`
       ? ParseType<Inner>[]
       : Trim<T> extends `record<${infer K},${infer V}>`
         ? Record<ParseType<K> & (string | number | symbol), ParseType<V>>
@@ -87,12 +93,17 @@ export type UnionToIntersection<U> = (
 
 /**
  * Parse a JSON Schema string into a JSON Schema object.
- * This is a utility type that is useful for converting a JSON Schema string into a JSON Schema object.
+ * This is a utility type that is useful for converting
+ * a JSON Schema string into a JSON Schema object.
  */
 export type ParseSchemaString<T extends string> = UnionToIntersection<
   ParseField<Split<T, ";">[number]>
 >;
 
+/**
+ * Represents a schema definition, which can be either 
+ * an Effect Schema.Struct or a string.
+ */
 export type SchemaOrString<T extends Schema.Struct.Fields = any> =
   | Schema.Struct<T>
   | string;
