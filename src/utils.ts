@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import type { IndexDefinition } from "./types/metadata.js";
-import { parse } from "mdurl/index.js";
 
 const schema_map = {
   string: Schema.String,
