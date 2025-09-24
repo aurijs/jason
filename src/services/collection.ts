@@ -12,14 +12,17 @@ export const makeCollection = <Doc extends Record<string, any>>(
   collection_name: string
 ) =>
   Effect.gen(function* () {
+    // load services
     const fs = yield* FileSystem.FileSystem;
     const jsonFile = yield* JsonFileService;
     const config = yield* ConfigService;
     
+    // load path, schema and index
     const schema = yield* config.getCollectionSchema(collection_name);
     const IndexDefinitions = yield* config.getIndexDefinitions(collection_name);
     const collection_path = yield* config.getCollectionPath(collection_name);
     
+    // make index if it's non existent
     yield* fs.makeDirectory(collection_path, { recursive: true });
     
     const indexService = yield* makeIndexService(collection_name);
@@ -46,7 +49,6 @@ export const makeCollection = <Doc extends Record<string, any>>(
 
     const create = (data: Doc) =>
       Effect.gen(function* () {
-        
         const id = crypto.randomUUID() as string;
         const document_path = `${collection_path}/${id}.json`;
         const new_document = { ...data, id } as Doc;
@@ -74,6 +76,9 @@ export const makeCollection = <Doc extends Record<string, any>>(
             e.reason === "NotFound" ? Effect.succeed(undefined) : Effect.fail(e)
           )
         );
+
+    const has = (id: string) => fs.exists(`${collection_path}/${id}.json`);
+    
 
     const update = (id: string, data: Partial<Doc>) =>
       Effect.gen(function* () {
@@ -213,6 +218,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
       delete: deleteFn,
       find,
       findOne,
+      has,
       count,
       getMetadata
     };
