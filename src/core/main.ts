@@ -91,6 +91,12 @@ function createPromiseClient<Doc>(
   return promise_client;
 }
 
+/**
+ * Creates a JasonDB instance based on the provided configuration.
+ *
+ * @param config - The configuration object for the JasonDB instance.
+ * @returns A Promise that resolves to a Database instance with collections defined in the config.
+ */
 export const createJasonDB = async <
   const T extends Record<string, SchemaOrString>
 >(
