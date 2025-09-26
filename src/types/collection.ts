@@ -1,7 +1,12 @@
-import type { PlatformError } from "@effect/platform/Error";
-import { Schema, type Effect, type Stream } from "effect";
-import type { DatabaseError } from "../core/errors.js";
+import type {
+  BadArgument,
+  PlatformError,
+  SystemError
+} from "@effect/platform/Error";
+import { Schema, type Effect } from "effect";
+import type { DatabaseError, JsonError } from "../core/errors.js";
 import type { ParseSchemaString, SchemaOrString } from "./schema.js";
+import type { ParseError } from "effect/ParseResult";
 
 /**
  * A filter object used to specify criteria for querying documents in a collection.
@@ -63,13 +68,18 @@ export interface CollectionEffect<Doc> {
    * @param data The data for the new document, excluding the 'id'.
    * @returns An `Effect` that resolves to the created document or fails with an `Error`.
    */
-  readonly create: (data: Omit<Doc, "id">) => Effect.Effect<Doc, Error>;
+  readonly create: (data: Doc) => Effect.Effect<Doc, DatabaseError>;
   /**
    * Retrieves a document by its ID.
    * @param id The ID of the document to retrieve.
    * @returns An `Effect` that resolves to the document or `undefined` if not found, and can fail with an `Error`.
    */
-  readonly findById: (id: string) => Effect.Effect<Doc | undefined, Error>;
+  readonly findById: (
+    id: string
+  ) => Effect.Effect<
+    Doc | undefined,
+    BadArgument | SystemError | JsonError | ParseError
+  >;
   /**
    * Updates a document by its ID with partial data.
    * @param id The ID of the document to update.
@@ -78,7 +88,7 @@ export interface CollectionEffect<Doc> {
    */
   readonly update: (
     id: string,
-    data: Partial<Omit<Doc, "id">>
+    data: Partial<Doc>
   ) => Effect.Effect<Doc | undefined, DatabaseError>;
   /**
    * Deletes a document by its ID.
@@ -92,15 +102,7 @@ export interface CollectionEffect<Doc> {
    * @returns An `Effect` that resolves to an array of documents and can fail with an `Error`.
    */
   readonly find: (options: QueryOptions<Doc>) => Effect.Effect<Doc[], Error>;
-  /**
-   * Finds documents and returns them as a `Stream`.
-   * This is useful for processing large datasets efficiently.
-   * @param options Query options for filtering and ordering.
-   * @returns A `Stream` of documents that can fail with a `DatabaseError`.
-   */
-  readonly findStream: (
-    options: QueryOptions<Doc>
-  ) => Stream.Stream<Doc, DatabaseError>;
+
   /**
    * Checks if a document with the given ID exists.
    * @param id The ID of the document to check.
@@ -219,7 +221,7 @@ export interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
    *  }
    * });
    * ```
-   * 
+   *
    * Accessing a collection
    * ```ts
    * const { user } = db.collections;
