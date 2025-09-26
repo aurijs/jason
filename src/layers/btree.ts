@@ -179,9 +179,9 @@ export const makeBtreeService = <K, V>(
           (new_root.children as string[]).push(root.id);
           yield* splitChild(new_root, 0, root);
           yield* updateRootId(new_root.id);
-          yield* insertNonFull(new_root, key, value);
+          yield* insertNonFull(new_root, key, value as string);
         } else {
-          yield* insertNonFull(root, key, value);
+          yield* insertNonFull(root, key, value as string);
         }
       });
 
