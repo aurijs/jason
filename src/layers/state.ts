@@ -9,11 +9,12 @@ import type { CollectionEffect } from "../types/collection.js";
 import type { WALOperation } from "../types/wal.js";
 import { JsonFileLive } from "./json-file.js";
 import { JsonLive } from "./json.js";
-import { CowService } from "../services/cow.js";
+import { TransactionManager } from "../services/transaction.js";
 
 export const StateLive = Layer.scoped(
   StateService,
   Effect.gen(function* () {
+    const tm = yield* TransactionManager;
     const wal = yield* WALService;
     const channel = yield* WalChannel;
 
@@ -33,9 +34,8 @@ export const StateLive = Layer.scoped(
       new Map()
     );
 
-    const apply = (op: WALOperation) =>
+    const applyOp = (op: WALOperation) =>
       Effect.gen(function* () {
-
         const collections = yield* Ref.get(collections_ref);
         let collection_service = collections.get(op.collection);
 
@@ -54,11 +54,16 @@ export const StateLive = Layer.scoped(
             m.set(op.collection, collection_service as CollectionEffect<any>)
           );
         }
-      }).pipe(
-        Effect.mapError(
-          (e) => new Error("Fail while applying WAL operation", { cause: e })
-        )
-      );
+      });
+
+    const apply = (op: WALOperation) =>
+      tm
+        .withTransaction(applyOp(op))
+        .pipe(
+          Effect.mapError(
+            (e) => new Error("Fail while applying WAL operation", { cause: e })
+          )
+        );
 
     yield* Stream.runForEach(wal.replay, ({ op }) => apply(op));
 

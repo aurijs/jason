@@ -3,7 +3,11 @@ import { Effect } from "effect";
 import { DatabaseError } from "../core/errors.js";
 import { makeIndexService } from "../layers/index.js";
 import { makeMetadata } from "../layers/metadata.js";
-import type { Filter, QueryOptions } from "../types/collection.js";
+import type {
+  CollectionEffect,
+  Filter,
+  QueryOptions
+} from "../types/collection.js";
 import type { IndexDefinition } from "../types/metadata.js";
 import { ConfigService } from "./config.js";
 import { JsonFileService } from "./json-file.js";
@@ -16,18 +20,17 @@ export const makeCollection = <Doc extends Record<string, any>>(
     const fs = yield* FileSystem.FileSystem;
     const jsonFile = yield* JsonFileService;
     const config = yield* ConfigService;
-    
+
     // load path, schema and index
     const schema = yield* config.getCollectionSchema(collection_name);
     const IndexDefinitions = yield* config.getIndexDefinitions(collection_name);
     const collection_path = yield* config.getCollectionPath(collection_name);
-    
+
     // make index if it's non existent
     yield* fs.makeDirectory(collection_path, { recursive: true });
-    
+
     const indexService = yield* makeIndexService(collection_name);
     const metadataService = yield* makeMetadata(collection_name);
-
 
     const loadAll = Effect.gen(function* () {
       const files = yield* fs.readDirectory(collection_path);
@@ -78,7 +81,6 @@ export const makeCollection = <Doc extends Record<string, any>>(
         );
 
     const has = (id: string) => fs.exists(`${collection_path}/${id}.json`);
-    
 
     const update = (id: string, data: Partial<Doc>) =>
       Effect.gen(function* () {
@@ -221,5 +223,5 @@ export const makeCollection = <Doc extends Record<string, any>>(
       has,
       count,
       getMetadata
-    };
+    } as CollectionEffect<Doc>;
   });
