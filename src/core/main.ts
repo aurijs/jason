@@ -1,10 +1,10 @@
-import { FileSystem } from "@effect/platform";
-import { BunFileSystem } from "@effect/platform-bun";
+import { FileSystem, Path } from "@effect/platform";
+import { BunContext, BunFileSystem } from "@effect/platform-bun";
 import { Context, Effect, Layer, Runtime, Schema } from "effect";
 import { ConfigLive } from "../layers/config.js";
 import { JsonFileLive } from "../layers/json-file.js";
 import { JsonLive } from "../layers/json.js";
-import { WALLive } from "../layers/wal.js";
+import { WALServiceLive } from "../layers/wal.js";
 import { makeCollection } from "../services/collection.js";
 import { ConfigService } from "../services/config.js";
 import type {
@@ -15,7 +15,6 @@ import type {
 } from "../types/collection.js";
 import type { Database, DatabaseEffect } from "../types/database.js";
 import type { SchemaOrString } from "../types/schema.js";
-import { StateLive } from "../layers/state.js";
 
 export class JasonDB extends Context.Tag("DatabaseService")<
   JasonDB,
@@ -27,19 +26,17 @@ export const createJasonDBLayer = <
 >(
   config: JasonDBConfig<T>
 ) => {
-  const BaseInfraLayer = Layer.mergeAll(
-    BunFileSystem.layer,
-    JsonLive,
-    JsonFileLive
-  );
+  const ConfigLayer = ConfigLive(config);
+
+  const BaseInfraLayer = Layer.mergeAll(BunContext.layer, JsonLive);
 
   const AppServicesLayer = Layer.mergeAll(
-    ConfigLive(config),
-    WALLive,
-    StateLive
+    ConfigLayer,
+    JsonFileLive,
+    WALServiceLive
   );
 
-  const InfraLayer = Layer.mergeAll(AppServicesLayer, BaseInfraLayer);
+  const InfraLayer = Layer.provide(AppServicesLayer, BaseInfraLayer);
 
   return Layer.scoped(
     JasonDB,
