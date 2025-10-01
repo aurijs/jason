@@ -5,12 +5,9 @@ import { ConfigService } from "../services/config.js";
 import type { JasonDBConfig } from "../types/collection.js";
 import type { SchemaOrString } from "../types/schema.js";
 import {
-  extractIndexDefinitions,
-  parseSchemaFromString,
-  generateSchemaFromDefinitions,
-  parseSchemaString,
   buildIndexDefinitions,
-  buildSchema
+  buildSchema,
+  parseSchemaString
 } from "../utils.js";
 
 export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
@@ -62,5 +59,6 @@ export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
             path.join(config.base_path, collection_name, "_metadata.json")
           )
       });
-    }).pipe(Effect.provide(BunContext.layer))
+    })
+    // .pipe(Effect.provide(BunContext.layer))
   );
