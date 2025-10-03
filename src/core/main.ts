@@ -1,12 +1,11 @@
-import { FileSystem, Path } from "@effect/platform";
-import { BunContext, BunFileSystem } from "@effect/platform-bun";
+import { FileSystem } from "@effect/platform";
+import { BunContext } from "@effect/platform-bun";
 import { Context, Effect, Layer, Runtime, Schema } from "effect";
-import { ConfigLive } from "../layers/config.js";
-import { JsonFileLive } from "../layers/json-file.js";
-import { JsonLive } from "../layers/json.js";
-import { WALServiceLive } from "../layers/wal.js";
+import { ConfigManager } from "../layers/config.js";
+import { JsonFile } from "../layers/json-file.js";
+import { Json } from "../layers/json.js";
+import { WriteAheadLog } from "../layers/wal.js";
 import { makeCollection } from "../services/collection.js";
-import { ConfigService } from "../services/config.js";
 import type {
   Collection,
   CollectionEffect,
@@ -21,51 +20,56 @@ export class JasonDB extends Context.Tag("DatabaseService")<
   DatabaseEffect<any>
 >() {}
 
+const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
+  config: JasonDBConfig<T>
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const collection_names = config.collections
+      ? Object.keys(config.collections)
+      : [];
+    const base_path = config.base_path;
+
+    yield* fs.makeDirectory(base_path, { recursive: true });
+
+    const collection_services = yield* Effect.all(
+      Object.fromEntries(
+        collection_names.map((name) => [name, makeCollection(name)])
+      )
+    );
+
+    type CollectionsSchema = {
+      [K in keyof T]: T[K] extends Schema.Schema<any, infer A> ? A : any;
+    };
+
+    const databaseService: DatabaseEffect<CollectionsSchema> = {
+      collections: collection_services as any
+    };
+
+    return databaseService;
+  });
+
 export const createJasonDBLayer = <
   const T extends Record<string, SchemaOrString>
 >(
   config: JasonDBConfig<T>
-) => {
-  const ConfigLayer = ConfigLive(config);
+): Layer.Layer<JasonDB, Error, never> => {
+  const ConfigLayer = ConfigManager.Default(config);
 
-  const BaseInfraLayer = Layer.mergeAll(BunContext.layer, JsonLive);
-
-  const AppServicesLayer = Layer.mergeAll(
-    ConfigLayer,
-    JsonFileLive,
-    WALServiceLive
+  const BaseInfraLayer = Layer.mergeAll(
+    JsonFile.Default,
+    BunContext.layer,
+    Json.Default,
+    WriteAheadLog.Default
   );
 
-  const InfraLayer = Layer.provide(AppServicesLayer, BaseInfraLayer);
+  const AppLayer = Layer.scoped(JasonDB, makeJasonDB<T>(config));
 
-  return Layer.scoped(
-    JasonDB,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const base_path = config.base_path;
-      const configService = yield* ConfigService;
-      const collection_names = yield* configService.getCollectionNames;
+  const FullInfraLayer = Layer.provideMerge(BaseInfraLayer, ConfigLayer);
 
-      yield* fs.makeDirectory(base_path, { recursive: true });
-
-      const collection_services = yield* Effect.all(
-        Object.fromEntries(
-          collection_names.map((name) => [name, makeCollection(name)])
-        )
-      );
-
-      type CollectionsSchema = {
-        [K in keyof T]: T[K] extends Schema.Schema<any, infer A> ? A : any;
-      };
-
-      const databaseService: DatabaseEffect<CollectionsSchema> = {
-        collections: collection_services as any
-      };
-
-      return databaseService;
-    })
-  ).pipe(Layer.provide(InfraLayer));
+  return AppLayer.pipe(Layer.provide(FullInfraLayer));
 };
+
 /**
  * Creates a Promise client from an Effect service.
  *
