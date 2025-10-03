@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { IndexDefinition } from "./types/metadata.js";
 
 const schema_map = {
@@ -21,6 +21,8 @@ interface ParsedFields {
   is_unique: boolean;
   compound_path: string[] | undefined;
 }
+
+export const initializeDir = () => Effect.gen(function* () {});
 
 export function parseSchemaString(schema_string: string) {
   if (!schema_string.trim()) return [];
