@@ -1,5 +1,17 @@
 import { Data } from "effect";
 
+export class WalWriteError extends Data.TaggedError("WalWriteError")<{
+  cause: unknown;
+}> {}
+
+export class WalReplayError extends Data.TaggedError("WalReplayError")<{
+  cause: unknown;
+}> {}
+
+export class WalCheckpointError extends Data.TaggedError("WalCheckpointError")<{
+  cause: unknown;
+}> {}
+
 export class DatabaseError extends Data.TaggedError("DatabaseError")<{
   message: string;
   cause: unknown;
