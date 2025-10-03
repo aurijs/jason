@@ -1,7 +1,7 @@
 import { FileSystem } from "@effect/platform";
 import { Effect, Ref, Schema } from "effect";
-import { JsonService } from "../services/json.js";
 import type { Mutable } from "../types/utils.js";
+import { Json } from "./json.js";
 
 const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
   Schema.Struct({
@@ -17,14 +17,14 @@ type BTreeNode<K> = Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>;
 const RootPointerSchema = Schema.Struct({ root_id: Schema.String });
 type RootPointer = Mutable<typeof RootPointerSchema.Type>;
 
-export const makeBtreeService = <K, V>(
+export const makeBtreeService = <K>(
   three_path: string,
   key_schema: Schema.Schema<any, K>,
   order: number
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const jsonService = yield* JsonService;
+    const jsonService = yield* Json;
     const node_schema = BTreeNodeSchema(key_schema);
     const root_pointer_path = `${three_path}/_root.json`;
 

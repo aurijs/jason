@@ -1,64 +1,100 @@
 import { Path } from "@effect/platform";
 import { BunContext } from "@effect/platform-bun";
-import { Effect, Layer } from "effect";
-import { ConfigService } from "../services/config.js";
+import { Effect, Schema } from "effect";
 import type { JasonDBConfig } from "../types/collection.js";
-import type { SchemaOrString } from "../types/schema.js";
 import {
   buildIndexDefinitions,
   buildSchema,
   parseSchemaString
 } from "../utils.js";
+import type { IndexDefinition } from "../types/metadata.js";
 
-export const ConfigLive = <const T extends Record<string, SchemaOrString>>(
-  config: JasonDBConfig<T>
-) =>
-  Layer.effect(
-    ConfigService,
-    Effect.gen(function* () {
-      const path = yield* Path.Path;
+export class ConfigManager extends Effect.Service<ConfigManager>()(
+  "ConfigManager",
+  {
+    dependencies: [BunContext.layer],
+    effect: (config: JasonDBConfig<any>) =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
 
-      const all_parsed_fields = Object.fromEntries(
-        Object.entries(config.collections).map(([name, schema]) => [
-          name,
-          typeof schema === "string" ? parseSchemaString(schema) : []
-        ])
-      );
+        const all_parsed_fields = Object.fromEntries(
+          Object.entries(config.collections).map(([name, schema]) => [
+            name,
+            typeof schema === "string" ? parseSchemaString(schema) : []
+          ])
+        );
 
-      const all_index_definitions = Object.fromEntries(
-        Object.entries(all_parsed_fields).map(([name, parsed]) => [
-          name,
-          buildIndexDefinitions(parsed)
-        ])
-      );
+        const all_index_definitions = Object.fromEntries(
+          Object.entries(all_parsed_fields).map(([name, parsed]) => [
+            name,
+            buildIndexDefinitions(parsed)
+          ])
+        );
 
-      const all_schemas = Object.fromEntries(
-        Object.entries(config.collections).map(([name, schemaOrString]) => {
-          if (typeof schemaOrString === "string") {
-            return [name, buildSchema(all_parsed_fields[name])];
-          }
-          return [name, schemaOrString];
-        })
-      );
+        const all_schemas = Object.fromEntries(
+          Object.entries(config.collections).map(([name, schemaOrString]) => {
+            if (typeof schemaOrString === "string") {
+              return [name, buildSchema(all_parsed_fields[name])];
+            }
+            return [name, schemaOrString];
+          })
+        );
 
-      return ConfigService.of({
-        getBasePath: Effect.succeed(config.base_path),
-        getCollectionNames: Effect.succeed(Object.keys(config.collections)),
-        getCollectionPath: (collection_name) =>
-          Effect.succeed(path.join(config.base_path, collection_name)),
-        getIndexPath: (collection_name) =>
-          Effect.succeed(
-            path.join(config.base_path, collection_name, "_indexes")
-          ),
-        getCollectionSchema: (collection_name) =>
-          Effect.succeed(all_schemas[collection_name]),
-        getIndexDefinitions: (collection_name) =>
-          Effect.succeed(all_index_definitions[collection_name]),
-        getMetadataPath: (collection_name) =>
-          Effect.succeed(
-            path.join(config.base_path, collection_name, "_metadata.json")
-          )
-      });
-    })
-    // .pipe(Effect.provide(BunContext.layer))
-  );
+        return {
+          /** @return the database path */
+          getBasePath: Effect.succeed(config.base_path),
+
+          /** @return the list of all collection names */
+          getCollectionNames: Effect.succeed(Object.keys(config.collections)),
+
+          /**
+           * @param collection_name - The name of the collection
+           * @return The full path for a specific collection
+           */
+          getCollectionPath: (collection_name: string) =>
+            Effect.succeed(path.join(config.base_path, collection_name)),
+
+          /**
+           * @param collection_name - The name of the collection
+           * @return The path for the indexes directory of a collecition
+           */
+          getIndexPath: (collection_name: string) =>
+            Effect.succeed(
+              path.join(config.base_path, collection_name, "_indexes")
+            ),
+
+          /**
+           * @param collection_name - The name of the collection
+           * @return The schema of a specific collection
+           */
+          getCollectionSchema: (collection_name: string) =>
+            Effect.succeed(
+              all_schemas[collection_name] as Schema.Struct<
+                Record<string, Schema.Schema<any, any>>
+              >
+            ),
+
+          /**
+           * @param collection_name - The name of the collection
+           * @return The parsed index definition of a collection
+           */
+          getIndexDefinitions: (collection_name: string) =>
+            Effect.succeed(
+              all_index_definitions[collection_name] as Record<
+                string,
+                IndexDefinition
+              >
+            ),
+
+          /**
+           * @param collection_name - The name of the collection
+           * @return The path for the metadata
+           */
+          getMetadataPath: (collection_name: string) =>
+            Effect.succeed(
+              path.join(config.base_path, collection_name, "_metadata.json")
+            )
+        };
+      })
+  }
+) {}

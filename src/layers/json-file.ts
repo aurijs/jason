@@ -1,16 +1,14 @@
 import { FileSystem } from "@effect/platform";
-import { BunFileSystem } from "@effect/platform-bun";
-import { Effect, Layer, Schema } from "effect";
-import { JsonFileService } from "../services/json-file.js";
-import { JsonService } from "../services/json.js";
+import { BunContext } from "@effect/platform-bun";
+import { Effect, Schema } from "effect";
 import type { Stringified } from "../types/json.js";
-import { JsonLive } from "./json.js";
+import { Json } from "./json.js";
 
-export const JsonFileLive = Layer.effect(
-  JsonFileService,
-  Effect.gen(function* () {
+export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
+  dependencies: [Json.Default, BunContext.layer],
+  effect: Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const json = yield* JsonService;
+    const json = yield* Json;
 
     const readJsonFile = <A, I>(path: string, schema: Schema.Schema<A, I>) =>
       fs.readFileString(path).pipe(
@@ -31,9 +29,19 @@ export const JsonFileLive = Layer.effect(
       );
 
     return {
+      /**
+       * Reads, parses and decode a JSON file, returning
+       * the typed object
+       *
+       * The `A` type is infered from a schema
+       */
       readJsonFile,
+
+      /**
+       * Encode and serialize an object to a JSON string
+       * writes it in a file.
+       */
       writeJsonFile
     };
   })
-  // .pipe(Effect.provide(JsonLive), Effect.provide(BunFileSystem.layer))
-);
+}) {}

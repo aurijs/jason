@@ -1,22 +1,29 @@
-import { Layer, Effect } from "effect";
-import { JsonService } from "../services/json.js";
+import { Effect } from "effect";
 import { JsonError } from "../core/errors.js";
-import type { JsonifiedObject, Stringified } from "../types/json.js";
 
-export const JsonLive = Layer.succeed(
-  JsonService,
-  JsonService.of({
-    parse: <T>(text: Stringified<T>) =>
+export class Json extends Effect.Service<Json>()("Json", {
+  succeed: {
+    /**
+     * Parse JSON string to object
+     * @param text - JSON string
+     * @returns parsed JSON
+     */
+    parse: (text: string) =>
       Effect.try({
-        try: () => JSON.parse(text) as JsonifiedObject<T>,
+        try: () => JSON.parse(text),
         catch: (cause) =>
           new JsonError({ message: "Failed to parse JSON", cause })
       }),
-    stringify: <T>(data: T) =>
+    /**
+     * Stringify object to JSON string
+     * @param data - JSON object
+     * @returns JSON string
+     */
+    stringify: (data: any) =>
       Effect.try({
-        try: () => JSON.stringify(data) as Stringified<T>,
+        try: () => JSON.stringify(data),
         catch: (cause) =>
           new JsonError({ message: "Failed to stringify JSON", cause })
       })
-  })
-);
+  }
+}) {}

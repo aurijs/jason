@@ -1,12 +1,12 @@
 import { Effect } from "effect";
-import { ConfigService } from "../services/config.js";
+import { ConfigManager } from "./config.js";
 import { makeBtreeService } from "./btree.js";
 
 export const makeIndexService = <Doc extends { id?: string }>(
   index_name: string
 ) =>
   Effect.gen(function* () {
-    const config = yield* ConfigService;
+    const config = yield* ConfigManager;
 
     const collection_path = yield* config.getCollectionPath(index_name);
     const doc_schema = yield* config.getCollectionSchema(index_name);

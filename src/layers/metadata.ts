@@ -1,8 +1,8 @@
 import { FileSystem } from "@effect/platform";
 import { Effect, Ref } from "effect";
-import { ConfigService } from "../services/config.js";
-import { JsonFileService } from "../services/json-file.js";
-import { JsonService } from "../services/json.js";
+import { ConfigManager } from "./config.js";
+import { JsonFile } from "./json-file.js";
+import { Json } from "./json.js";
 import {
   type CollectionMetadata,
   CollectionMetadataSchema
@@ -21,9 +21,9 @@ import {
 export const makeMetadata = (collection_name: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const jsonService = yield* JsonService;
-    const jsonFile = yield* JsonFileService;
-    const config = yield* ConfigService;
+    const jsonService = yield* Json;
+    const jsonFile = yield* JsonFile;
+    const config = yield* ConfigManager;
     const metadata_path = yield* config.getMetadataPath(collection_name);
 
     /**
