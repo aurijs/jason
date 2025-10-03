@@ -28,5 +28,9 @@ export const DeleteOpSchema = Schema.Struct({
 });
 export type DeleteOp = typeof DeleteOpSchema.Type;
 
-export const WALOperationSchema = Schema.Union(CreateOpSchema, UpdateOpSchema);
+export const WALOperationSchema = Schema.Union(
+  CreateOpSchema,
+  UpdateOpSchema,
+  DeleteOpSchema
+);
 export type WALOperation = typeof WALOperationSchema.Type;

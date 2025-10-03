@@ -1,23 +1,18 @@
 import { FileSystem, Path } from "@effect/platform";
+import { Effect, Exit, Ref, Schema, Scope, Stream } from "effect";
 import {
-  Effect,
-  Exit,
-  Fiber,
-  Option,
-  Ref,
-  Schema,
-  Scope,
-  Stream
-} from "effect";
-import { JsonService } from "../services/json.js";
+  WalCheckpointError,
+  WalReplayError,
+  WalWriteError
+} from "../core/errors.js";
+import { Json } from "../layers/json.js";
 import { WALOperationSchema, type WALOperation } from "../types/wal.js";
-import type { PlatformError } from "@effect/platform/Error";
 
 export const makeWal = (wal_path: string, max_segment_size: number) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const json = yield* JsonService;
+    const json = yield* Json;
 
     yield* fs.makeDirectory(wal_path, { recursive: true });
 
@@ -36,34 +31,31 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
     const file_state_ref = yield* Ref.make<{
       segment: number;
       handle: FileSystem.File;
-      fiber: Fiber.RuntimeFiber<FileSystem.File, PlatformError>;
+      scope: Scope.CloseableScope;
     } | null>(null);
 
-    // the last fiber is interrupted when the service is finilized
     yield* Effect.addFinalizer(() =>
       Ref.get(file_state_ref).pipe(
         Effect.flatMap((state) =>
-          state ? Fiber.interrupt(state.fiber) : Effect.void
+          state ? Scope.close(state.scope, Exit.void) : Effect.void
         )
       )
     );
 
-    const openFileInScopedFiber = (segment: number) =>
+    const openFileInScope = (segment: number) =>
       Effect.gen(function* () {
-        const open_effect = fs.open(
-          path.join(wal_path, `segment-${segment}.log`),
-          {
-            flag: "a"
-          }
-        );
+        const scope = yield* Scope.make();
 
-        const fiber = yield* Effect.fork(Effect.scoped(open_effect));
-        const handle = yield* Fiber.join(fiber);
+        const handle = yield* fs
+          .open(path.join(wal_path, `segment-${segment}.log`), {
+            flag: "a"
+          })
+          .pipe(Scope.extend(scope));
 
         return {
           segment,
           handle,
-          fiber
+          scope
         };
       });
 
@@ -73,10 +65,10 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
       if (state) {
         const stats = yield* state.handle.stat;
         if (stats.size > max_segment_size) {
-          yield* Fiber.interrupt(state.fiber);
+          yield* Scope.close(state.scope, Exit.void);
 
           const new_segment = state.segment + 1;
-          const new_state = yield* openFileInScopedFiber(new_segment);
+          const new_state = yield* openFileInScope(new_segment);
           yield* Ref.set(file_state_ref, new_state);
 
           return new_state;
@@ -87,7 +79,7 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
         const segments = yield* get_log_segments;
         const initial_segment =
           segments.length > 0 ? segments[segments.length - 1] : 1;
-        const initial_state = yield* openFileInScopedFiber(initial_segment);
+        const initial_state = yield* openFileInScope(initial_segment);
 
         yield* Ref.set(file_state_ref, initial_state);
         return initial_state;
@@ -112,11 +104,7 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
 
       return write_semaphore
         .withPermits(1)(write_effect)
-        .pipe(
-          Effect.mapError(
-            (e) => new Error("Fail while writing to WAL", { cause: e })
-          )
-        );
+        .pipe(Effect.mapError((cause) => new WalWriteError({ cause })));
     };
 
     const replay = Stream.fromEffect(get_log_segments).pipe(
@@ -128,14 +116,12 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
           Stream.mapEffect((line) =>
             json.parse(line).pipe(
               Effect.flatMap((p) => Schema.decode(WALOperationSchema)(p)),
-              Effect.map((op) => ({ op, segment, position: 0n })) // Cast para o tipo explícito
+              Effect.map((op) => ({ op, segment, position: 0n }))
             )
           )
         )
       ),
-      Stream.mapError(
-        (e) => new Error("Fail while replaying WAL", { cause: e })
-      )
+      Stream.mapError((cause) => new WalReplayError({ cause }))
     );
 
     const checkpoint = (up_to_segment: number) =>
@@ -146,7 +132,7 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
           current_state?.segment ??
           (segments.length > 0 ? segments[segments.length - 1] : 1);
         const segments_to_delete = segments.filter(
-          (s) => s <= up_to_segment && s < current_segment // Nunca deleta o segmento ativo!
+          (s) => s <= up_to_segment && s < current_segment
         );
 
         yield* Effect.all(
@@ -155,11 +141,7 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
           ),
           { discard: true }
         );
-      }).pipe(
-        Effect.mapError(
-          (e) => new Error("Fail while checkpointing WAL", { cause: e })
-        )
-      );
+      }).pipe(Effect.mapError((cause) => new WalCheckpointError({ cause })));
 
     return {
       log,

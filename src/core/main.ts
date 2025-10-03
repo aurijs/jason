@@ -1,6 +1,6 @@
 import { FileSystem } from "@effect/platform";
 import { BunContext } from "@effect/platform-bun";
-import { Context, Effect, Layer, Runtime, Schema } from "effect";
+import { Context, Effect, Layer, Runtime, Schema, Stream } from "effect";
 import { ConfigManager } from "../layers/config.js";
 import { JsonFile } from "../layers/json-file.js";
 import { Json } from "../layers/json.js";
@@ -25,6 +25,56 @@ const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const jsonFile = yield* JsonFile;
+    const wal = yield* WriteAheadLog;
+    const configManager = yield* ConfigManager;
+
+    let lastSegment = 0;
+    yield* wal.replay.pipe(
+      Stream.runForEach(({ op, segment }) => {
+        lastSegment = Math.max(lastSegment, segment);
+        return Effect.gen(function* () {
+          const schema = yield* configManager.getCollectionSchema(
+            op.collection
+          );
+          const collectionPath = yield* configManager.getCollectionPath(
+            op.collection
+          );
+
+          switch (op._tag) {
+            case "CreateOp": {
+              const docPath = `${collectionPath}/${op.data.id}.json`;
+              return yield* jsonFile.writeJsonFile(docPath, schema, op.data);
+            }
+            case "UpdateOp": {
+              const docPath = `${collectionPath}/${op.id}.json`;
+              return yield* jsonFile.readJsonFile(docPath, schema).pipe(
+                Effect.flatMap((doc) =>
+                  doc
+                    ? jsonFile.writeJsonFile(docPath, schema, {
+                        ...doc,
+                        ...op.data
+                      })
+                    : Effect.void
+                ),
+                Effect.catchTag("SystemError", () => Effect.void)
+              );
+            }
+            case "DeleteOp": {
+              const docPath = `${collectionPath}/${op.id}.json`;
+              return yield* fs
+                .remove(docPath, { recursive: true })
+                .pipe(Effect.catchTag("SystemError", () => Effect.void));
+            }
+          }
+        });
+      })
+    );
+
+    if (lastSegment > 0) {
+      yield* wal.checkpoint(lastSegment);
+    }
+
     const collection_names = config.collections
       ? Object.keys(config.collections)
       : [];
