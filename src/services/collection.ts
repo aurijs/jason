@@ -9,8 +9,9 @@ import type {
   QueryOptions
 } from "../types/collection.js";
 import type { IndexDefinition } from "../types/metadata.js";
-import { ConfigService } from "./config.js";
-import { JsonFileService } from "./json-file.js";
+import { ConfigManager } from "../layers/config.js";
+import { JsonFile } from "../layers/json-file.js";
+import { WriteAheadLog } from "../layers/wal.js";
 
 export const makeCollection = <Doc extends Record<string, any>>(
   collection_name: string
@@ -18,8 +19,9 @@ export const makeCollection = <Doc extends Record<string, any>>(
   Effect.gen(function* () {
     // load services
     const fs = yield* FileSystem.FileSystem;
-    const jsonFile = yield* JsonFileService;
-    const config = yield* ConfigService;
+    const jsonFile = yield* JsonFile;
+    const config = yield* ConfigManager;
+    const wal = yield* WriteAheadLog;
 
     // load path, schema and index
     const schema = yield* config.getCollectionSchema(collection_name);
