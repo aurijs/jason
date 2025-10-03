@@ -58,6 +58,12 @@ export const makeCollection = <Doc extends Record<string, any>>(
         const document_path = `${collection_path}/${id}.json`;
         const new_document = { ...data, id } as Doc;
 
+        yield* wal.log({
+          _tag: "CreateOp",
+          collection: collection_name,
+          data: new_document
+        });
+
         yield* jsonFile.writeJsonFile(document_path, schema, new_document);
 
         yield* Effect.all([
@@ -93,6 +99,13 @@ export const makeCollection = <Doc extends Record<string, any>>(
           ...old_document,
           ...data
         } as Doc;
+
+        yield* wal.log({
+          _tag: "UpdateOp",
+          collection: collection_name,
+          id,
+          data
+        });
 
         yield* jsonFile.writeJsonFile(
           `${collection_path}/${id}.json`,
