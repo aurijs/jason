@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "2.1.9",
     "async-mutex": "^0.5.0",
     "devalue": "^5.3.2",
-    "effect": "^3.18.0",
+    "effect": "^3.18.1",
     "oxlint": "^1.19.0",
     "tsup": "^8.5.0",
     "vitest": "^3.2.4"
@@ -70,6 +70,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@effect/language-service": "^0.41.1",
     "@effect/platform-bun": "^0.79.1",
     "@prettier/plugin-oxc": "^0.0.4",
     "@types/madge": "^5.0.3",
