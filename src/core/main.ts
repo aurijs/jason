@@ -1,6 +1,15 @@
 import { FileSystem } from "@effect/platform";
 import { BunContext } from "@effect/platform-bun";
-import { Context, Effect, Layer, Runtime, Schema, Stream } from "effect";
+import {
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Runtime,
+  Schema,
+  Scope,
+  Stream
+} from "effect";
 import { ConfigManager } from "../layers/config.js";
 import { JsonFile } from "../layers/json-file.js";
 import { Json } from "../layers/json.js";
@@ -161,9 +170,12 @@ export const createJasonDB = async <
   config: JasonDBConfig<T>
 ): Promise<Database<InferCollections<T>>> => {
   const layer = createJasonDBLayer(config);
-  const runtime = await Effect.runPromise(
-    Layer.toRuntime(layer).pipe(Effect.scoped)
+  const scope = await Effect.runPromise(Scope.make());
+  const context = await Effect.runPromise(
+    Layer.build(layer).pipe(Scope.extend(scope))
   );
+
+  const runtime = Runtime.make({ ...Runtime.defaultRuntime, context });
   const run = Runtime.runPromise(runtime);
 
   const effect_base_db = (await run(JasonDB)) as DatabaseEffect<
@@ -184,6 +196,8 @@ export const createJasonDB = async <
   const promise_based_db = {
     collections: promise_based_collection
   };
+
+  // const dispode = () => Effect.runPromise(Scope.close(scope, Exit.void));
 
   return promise_based_db as Database<InferCollections<T>>;
 };
