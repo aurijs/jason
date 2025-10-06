@@ -1,7 +1,8 @@
 import { FileSystem, Path } from "@effect/platform";
-import { Effect, Exit, Ref, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Option, Ref, Schema, Scope, Stream } from "effect";
 import {
   WalCheckpointError,
+  WalInitializationError,
   WalReplayError,
   WalWriteError
 } from "../core/errors.js";
@@ -14,7 +15,15 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
     const path = yield* Path.Path;
     const json = yield* Json;
 
-    yield* fs.makeDirectory(wal_path, { recursive: true });
+    yield* fs.makeDirectory(wal_path, { recursive: true }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WalInitializationError({
+            reason: "DirectoryCreationError",
+            cause
+          })
+      )
+    );
 
     const write_semaphore = yield* Effect.makeSemaphore(1);
 
@@ -25,6 +34,10 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
           .filter((f) => f.startsWith("segment-") && f.endsWith(".log"))
           .map((f) => parseInt(f.split("-")[1], 10))
           .sort((a, b) => a - b)
+      ),
+      Effect.mapError(
+        (cause) =>
+          new WalInitializationError({ cause, reason: "DirectoryReadError" })
       )
     );
 
@@ -100,19 +113,28 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
 
           const line = yield* Schema.encode(WALOperationSchema)(op).pipe(
             Effect.flatMap(json.stringify),
-            Effect.map((l) => l + "\n")
+            Effect.map((l) => l + "\n"),
+            Effect.mapError(
+              (cause) =>
+                new WalWriteError({ cause, reason: "SerializationError" })
+            )
           );
 
-          yield* handle.write(Buffer.from(line));
-          yield* handle.sync; // durability ganrantee
+          const write_line = Effect.gen(function* () {
+            yield* handle.write(Buffer.from(line));
+            yield* handle.sync; // durability ganrantee
+            const final_stats = yield* handle.stat;
+            return { segment, position: final_stats.size };
+          }).pipe(
+            Effect.mapError(
+              (cause) => new WalWriteError({ cause, reason: "FileSystemError" })
+            )
+          );
 
-          const final_stats = yield* handle.stat;
-          return { segment, position: final_stats.size };
+          return yield* write_line;
         });
 
-        return write_semaphore
-          .withPermits(1)(write_effect)
-          .pipe(Effect.mapError((cause) => new WalWriteError({ cause })));
+        return write_semaphore.withPermits(1)(write_effect);
       },
 
       /**
@@ -122,20 +144,36 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
        * to restore the database state.
        */
       replay: Stream.fromEffect(get_log_segments).pipe(
+        Stream.mapError(
+          (cause) => new WalReplayError({ cause, reason: "DirectoryReadError" })
+        ),
         Stream.flatMap((segments) => Stream.fromIterable(segments)),
         Stream.flatMap((segment) =>
           fs.stream(path.join(wal_path, `segment-${segment}.log`)).pipe(
+            Stream.mapError(
+              (cause) => new WalReplayError({ cause, reason: "FileReadError" })
+            ),
             Stream.decodeText("utf-8"),
             Stream.splitLines,
             Stream.mapEffect((line) =>
               json.parse(line).pipe(
                 Effect.flatMap((p) => Schema.decode(WALOperationSchema)(p)),
-                Effect.map((op) => ({ op, segment, position: 0n }))
+                Effect.map((op) => ({ op, segment, position: 0n })),
+                Effect.catchAll((cause) =>
+                  Effect.logWarning("Skipping corrupted WAL line").pipe(
+                    Effect.annotateLogs("line", line),
+                    Effect.annotateLogs("cause", cause),
+                    Effect.andThen(Effect.fail(Option.none()))
+                  )
+                )
               )
-            )
+            ),
+            Stream.catchAll(() => Stream.empty)
           )
         ),
-        Stream.mapError((cause) => new WalReplayError({ cause }))
+        Stream.mapError(
+          (cause) => new WalReplayError({ cause, reason: "FileReadError" })
+        )
       ),
 
       /**
@@ -146,7 +184,12 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
        */
       checkpoint: (up_to_segment: number) =>
         Effect.gen(function* () {
-          const segments = yield* get_log_segments;
+          const segments = yield* get_log_segments.pipe(
+            Effect.mapError(
+              (cause) =>
+                new WalCheckpointError({ cause, reason: "DirectoryReadError" })
+            )
+          );
           const current_state = yield* Ref.get(file_state_ref);
           const current_segment =
             current_state?.segment ??
@@ -160,7 +203,20 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
               fs.remove(path.join(wal_path, `segment-${s}.log`))
             ),
             { discard: true }
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new WalCheckpointError({ cause, reason: "FileRemoveError" })
+            )
           );
-        }).pipe(Effect.mapError((cause) => new WalCheckpointError({ cause })))
+        })
     };
-  });
+  }).pipe(
+    Effect.mapError((cause) => {
+      if (cause instanceof WalInitializationError) return cause;
+      return new WalInitializationError({
+        reason: "DirectoryCreationError",
+        cause
+      });
+    })
+  );

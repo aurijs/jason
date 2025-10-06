@@ -1,56 +1,66 @@
 import { Data } from "effect";
 
 export class WalWriteError extends Data.TaggedError("WalWriteError")<{
-  cause: unknown;
+  readonly reason: "SerializationError" | "FileSystemError";
+  readonly cause: unknown;
 }> {}
 
 export class WalReplayError extends Data.TaggedError("WalReplayError")<{
-  cause: unknown;
+  readonly reason: "DirectoryReadError" | "FileReadError" | "ParseError";
+  readonly cause: unknown;
 }> {}
 
 export class WalCheckpointError extends Data.TaggedError("WalCheckpointError")<{
-  cause: unknown;
+  readonly reason: "DirectoryReadError" | "FileRemoveError";
+  readonly cause: unknown;
+}> {}
+
+export class WalInitializationError extends Data.TaggedError(
+  "WalInitializationError"
+)<{
+  readonly reason: "DirectoryCreationError" | "DirectoryReadError";
+  readonly cause: unknown;
 }> {}
 
 export class DatabaseError extends Data.TaggedError("DatabaseError")<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
 
 export class JsonFileError extends Data.TaggedError("JsonFileError")<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
 
 export class MetadataPersistenceError extends Data.TaggedError(
   "MetadataPersistenceError"
 )<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
 
 export class DocumentNotFoundError extends Data.TaggedError(
   "DocumentNotFoundError"
 )<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
 
 export class DeleteOperationError extends Data.TaggedError(
   "DeleteOperationError"
 )<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
 
 export class QueryOperationError extends Data.TaggedError(
   "QueryOperationError"
 )<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
 
 export class JsonError extends Data.TaggedError("JsonError")<{
-  message: string;
-  cause: unknown;
+  readonly message: string;
+  readonly cause: unknown;
 }> {}
