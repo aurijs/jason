@@ -43,15 +43,24 @@ export const makeCollection = <Doc extends Record<string, any>>(
             data: new_document
           });
 
-          yield* storage.write(id, new_document);
-
-          yield* Effect.all(
+          const post_write = Effect.all(
             [
+              storage.write(id, new_document),
               metadataService.incrementCount,
               indexService.update(undefined, new_document)
             ],
             { discard: true, concurrency: "unbounded" }
+          ).pipe(
+            Effect.catchAll((cause) =>
+              Effect.logError("Background WAL application failed").pipe(
+                Effect.annotateLogs("collection", collection_name),
+                Effect.annotateLogs("documentId", id),
+                Effect.annotateLogs("cause", cause)
+              )
+            )
           );
+
+          yield* Effect.forkDaemon(post_write);
 
           return new_document;
         }).pipe(
