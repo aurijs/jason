@@ -74,7 +74,7 @@
     "@effect/platform-bun": "^0.79.1",
     "@prettier/plugin-oxc": "^0.0.4",
     "@types/madge": "^5.0.3",
-    "eslint": "^9.36.0",
+    "eslint": "^9.37.0",
     "madge": "^8.0.0",
     "prettier": "^3.6.2"
   }
