@@ -1,8 +1,6 @@
-import { Layer, PubSub } from "effect";
-import { WalChannel } from "../services/wal-channel.js";
+import { Effect, PubSub } from "effect";
 import type { WALOperation } from "../types/wal.js";
 
-export const WalChannelLive = Layer.effect(
-  WalChannel,
-  PubSub.unbounded<WALOperation>()
-);
+export class WalChannel extends Effect.Service<WalChannel>()("WalChannel", {
+  effect: PubSub.unbounded<WALOperation>()
+}) {}

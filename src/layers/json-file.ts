@@ -10,24 +10,6 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
     const fs = yield* FileSystem.FileSystem;
     const json = yield* Json;
 
-    const readJsonFile = <A, I>(path: string, schema: Schema.Schema<A, I>) =>
-      fs.readFileString(path).pipe(
-        Effect.map((text) => text as Stringified<A>),
-        Effect.flatMap(json.parse),
-        Effect.flatMap((parsedJson) => Schema.decode(schema)(parsedJson as I))
-      );
-
-    const writeJsonFile = <A, I>(
-      path: string,
-      schema: Schema.Schema<A, I>,
-      data: A
-    ) =>
-      Schema.encode(schema)(data).pipe(
-        Effect.flatMap(json.stringify),
-        Effect.flatMap((content) => fs.writeFileString(path, content)),
-        Effect.asVoid
-      );
-
     return {
       /**
        * Reads, parses and decode a JSON file, returning
@@ -35,13 +17,27 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
        *
        * The `A` type is infered from a schema
        */
-      readJsonFile,
+      readJsonFile: <A, I>(path: string, schema: Schema.Schema<A, I>) =>
+        fs.readFileString(path).pipe(
+          Effect.map((text) => text as Stringified<A>),
+          Effect.flatMap(json.parse),
+          Effect.flatMap((parsedJson) => Schema.decode(schema)(parsedJson as I))
+        ),
 
       /**
        * Encode and serialize an object to a JSON string
        * writes it in a file.
        */
-      writeJsonFile
+      writeJsonFile: <A, I>(
+        path: string,
+        schema: Schema.Schema<A, I>,
+        data: A
+      ) =>
+        Schema.encode(schema)(data).pipe(
+          Effect.flatMap(json.stringify),
+          Effect.flatMap((content) => fs.writeFileString(path, content)),
+          Effect.asVoid
+        )
     };
   })
 }) {}

@@ -12,7 +12,7 @@ export class WriteAheadLog extends Effect.Service<WriteAheadLog>()("WriteAheadLo
     const config = yield* ConfigManager;
     const db_path = yield* config.getBasePath;
     const wal_path = path.join(db_path, "_wal"); // database root
-    const MAX_SEGMENT_SIZE = 16 * 1024 * 1024; // 16MB
+    const MAX_SEGMENT_SIZE = 1024 * 1024; // 1MB
     return yield* makeWal(wal_path, MAX_SEGMENT_SIZE);
   })
 }) {}

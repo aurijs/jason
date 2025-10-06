@@ -1,8 +1,8 @@
 import { FileSystem } from "@effect/platform";
 import { Effect, Ref } from "effect";
-import { ConfigManager } from "./config.js";
-import { JsonFile } from "./json-file.js";
-import { Json } from "./json.js";
+import { ConfigManager } from "../layers/config.js";
+import { JsonFile } from "../layers/json-file.js";
+import { Json } from "../layers/json.js";
 import {
   type CollectionMetadata,
   CollectionMetadataSchema
@@ -64,36 +64,34 @@ export const makeMetadata = (collection_name: string) =>
         .stringify(meta)
         .pipe(Effect.flatMap((s) => fs.writeFileString(metadata_path, s)));
 
-    /**
-     * Increments the document count and updates the timestamp.
-     */
     const incrementCount = Ref.updateAndGet(metadata_ref, (meta) => ({
       ...meta,
       document_count: meta.document_count + 1,
       updated_at: new Date()
     })).pipe(Effect.flatMap(persist), Effect.asVoid);
 
-    /**
-     * Decrements the document count and updates the timestamp.
-     */
     const decrementCount = Ref.updateAndGet(metadata_ref, (meta) => ({
       ...meta,
       document_count: meta.document_count - 1,
       updated_at: new Date()
     })).pipe(Effect.flatMap(persist), Effect.asVoid);
 
-    /**
-     * Updates the 'updated_at' timestamp.
-     */
     const touch = Ref.updateAndGet(metadata_ref, (meta) => ({
       ...meta,
       updated_at: new Date()
     })).pipe(Effect.flatMap(persist), Effect.asVoid);
 
     return {
+      /** Returns the current metadata state */
       get: Ref.get(metadata_ref),
+
+      /** Increments the document count and updates the timestamp */
       incrementCount,
+
+      /** Decrements the document count and updates the timestamp. */
       decrementCount,
+
+      /** Updates the 'updatedAt' timestamp */
       touch
     };
   });

@@ -86,66 +86,81 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
       }
     });
 
-    const log = (op: WALOperation) => {
-      const write_effect = Effect.gen(function* () {
-        const { segment, handle } = yield* ensure_file_open;
+    return {
+      /**
+       * Durably logs a database operation by appending it to the write-ahead log.
+       *
+       * @param op The operation to be logged.
+       * @returns An Effect that resolves with the segment number and the final write position,
+       * which are crucial for checkpointing.
+       */
+      log: (op: WALOperation) => {
+        const write_effect = Effect.gen(function* () {
+          const { segment, handle } = yield* ensure_file_open;
 
-        const line = yield* Schema.encode(WALOperationSchema)(op).pipe(
-          Effect.flatMap(json.stringify),
-          Effect.map((l) => l + "\n")
-        );
+          const line = yield* Schema.encode(WALOperationSchema)(op).pipe(
+            Effect.flatMap(json.stringify),
+            Effect.map((l) => l + "\n")
+          );
 
-        yield* handle.write(Buffer.from(line));
-        yield* handle.sync; // durability ganrantee
+          yield* handle.write(Buffer.from(line));
+          yield* handle.sync; // durability ganrantee
 
-        const final_stats = yield* handle.stat;
-        return { segment, position: final_stats.size };
-      });
+          const final_stats = yield* handle.stat;
+          return { segment, position: final_stats.size };
+        });
 
-      return write_semaphore
-        .withPermits(1)(write_effect)
-        .pipe(Effect.mapError((cause) => new WalWriteError({ cause })));
-    };
+        return write_semaphore
+          .withPermits(1)(write_effect)
+          .pipe(Effect.mapError((cause) => new WalWriteError({ cause })));
+      },
 
-    const replay = Stream.fromEffect(get_log_segments).pipe(
-      Stream.flatMap((segments) => Stream.fromIterable(segments)),
-      Stream.flatMap((segment) =>
-        fs.stream(path.join(wal_path, `segment-${segment}.log`)).pipe(
-          Stream.decodeText("utf-8"),
-          Stream.splitLines,
-          Stream.mapEffect((line) =>
-            json.parse(line).pipe(
-              Effect.flatMap((p) => Schema.decode(WALOperationSchema)(p)),
-              Effect.map((op) => ({ op, segment, position: 0n }))
+      /**
+       * Reads the entire WAL history, replaying operations segment by segment in order.
+       *
+       * @returns A Stream of operations that the Applier can process during initialization
+       * to restore the database state.
+       */
+      replay: Stream.fromEffect(get_log_segments).pipe(
+        Stream.flatMap((segments) => Stream.fromIterable(segments)),
+        Stream.flatMap((segment) =>
+          fs.stream(path.join(wal_path, `segment-${segment}.log`)).pipe(
+            Stream.decodeText("utf-8"),
+            Stream.splitLines,
+            Stream.mapEffect((line) =>
+              json.parse(line).pipe(
+                Effect.flatMap((p) => Schema.decode(WALOperationSchema)(p)),
+                Effect.map((op) => ({ op, segment, position: 0n }))
+              )
             )
           )
-        )
+        ),
+        Stream.mapError((cause) => new WalReplayError({ cause }))
       ),
-      Stream.mapError((cause) => new WalReplayError({ cause }))
-    );
 
-    const checkpoint = (up_to_segment: number) =>
-      Effect.gen(function* () {
-        const segments = yield* get_log_segments;
-        const current_state = yield* Ref.get(file_state_ref);
-        const current_segment =
-          current_state?.segment ??
-          (segments.length > 0 ? segments[segments.length - 1] : 1);
-        const segments_to_delete = segments.filter(
-          (s) => s <= up_to_segment && s < current_segment
-        );
+      /**
+       * Performs a checkpoint by removing all log segments up to and
+       * including the specified segment number.
+       *
+       * This consolidates the database state and frees up space.
+       */
+      checkpoint: (up_to_segment: number) =>
+        Effect.gen(function* () {
+          const segments = yield* get_log_segments;
+          const current_state = yield* Ref.get(file_state_ref);
+          const current_segment =
+            current_state?.segment ??
+            (segments.length > 0 ? segments[segments.length - 1] : 1);
+          const segments_to_delete = segments.filter(
+            (s) => s <= up_to_segment && s < current_segment
+          );
 
-        yield* Effect.all(
-          segments_to_delete.map((s) =>
-            fs.remove(path.join(wal_path, `segment-${s}.log`))
-          ),
-          { discard: true }
-        );
-      }).pipe(Effect.mapError((cause) => new WalCheckpointError({ cause })));
-
-    return {
-      log,
-      replay,
-      checkpoint
+          yield* Effect.all(
+            segments_to_delete.map((s) =>
+              fs.remove(path.join(wal_path, `segment-${s}.log`))
+            ),
+            { discard: true }
+          );
+        }).pipe(Effect.mapError((cause) => new WalCheckpointError({ cause })))
     };
   });

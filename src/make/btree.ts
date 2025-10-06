@@ -1,7 +1,7 @@
 import { FileSystem } from "@effect/platform";
 import { Effect, Ref, Schema } from "effect";
 import type { Mutable } from "../types/utils.js";
-import { Json } from "./json.js";
+import { Json } from "../layers/json.js";
 
 const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
   Schema.Struct({
@@ -169,22 +169,6 @@ export const makeBtreeService = <K>(
         }
       });
 
-    const insert = (key: K, value?: string) =>
-      Effect.gen(function* () {
-        const root_id = yield* Ref.get(rootIdRef);
-        let root = yield* readNode(root_id);
-
-        if (root.keys.length === 2 * order - 1) {
-          const new_root = yield* createNode(false);
-          (new_root.children as string[]).push(root.id);
-          yield* splitChild(new_root, 0, root);
-          yield* updateRootId(new_root.id);
-          yield* insertNonFull(new_root, key, value as string);
-        } else {
-          yield* insertNonFull(root, key, value as string);
-        }
-      });
-
     const findInNode = (
       node_id: string,
       key: K
@@ -207,18 +191,38 @@ export const makeBtreeService = <K>(
         return yield* findInNode(node.children[i], key);
       });
 
-    /**
-     * Finds the value associated with a given key in the B-tree.
-     * @param key The key to search for.
-     * @returns - The value associated with the key, or undefined if not found.
-     */
-    const find = (key: K) =>
-      Ref.get(rootIdRef).pipe(
-        Effect.flatMap((rootId) => findInNode(rootId, key))
-      );
-
     return {
-      insert,
-      find
+      /**
+       * Inserts a key-value pair into the B-tree.
+       *
+       * @param key The key to insert.
+       * @param value The value associated with the key.
+       * @returns An effect that completes when the insertion is done.
+       */
+      insert: (key: K, value?: string) =>
+        Effect.gen(function* () {
+          const root_id = yield* Ref.get(rootIdRef);
+          let root = yield* readNode(root_id);
+
+          if (root.keys.length === 2 * order - 1) {
+            const new_root = yield* createNode(false);
+            (new_root.children as string[]).push(root.id);
+            yield* splitChild(new_root, 0, root);
+            yield* updateRootId(new_root.id);
+            yield* insertNonFull(new_root, key, value as string);
+          } else {
+            yield* insertNonFull(root, key, value as string);
+          }
+        }),
+
+      /**
+       * Finds the value associated with a given key in the B-tree.
+       * @param key The key to search for.
+       * @returns - The value associated with the key, or undefined if not found.
+       */
+      find: (key: K) =>
+        Ref.get(rootIdRef).pipe(
+          Effect.flatMap((rootId) => findInNode(rootId, key))
+        )
     };
   });

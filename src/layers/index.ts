@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { ConfigManager } from "./config.js";
-import { makeBtreeService } from "./btree.js";
+import { makeBtreeService } from "../make/btree.js";
 
 export const makeIndexService = <Doc extends { id?: string }>(
   index_name: string
