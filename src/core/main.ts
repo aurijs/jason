@@ -5,7 +5,7 @@ import { ConfigManager } from "../layers/config.js";
 import { JsonFile } from "../layers/json-file.js";
 import { Json } from "../layers/json.js";
 import { WriteAheadLog } from "../layers/wal.js";
-import { makeCollection } from "../services/collection.js";
+import { makeCollection } from "../make/collection.js";
 import type {
   Collection,
   CollectionEffect,
