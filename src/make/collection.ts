@@ -51,7 +51,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
             ],
             { discard: true, concurrency: "unbounded" }
           ).pipe(
-            Effect.catchAll((cause) =>
+            Effect.catchAllCause((cause) =>
               Effect.logError("Background WAL application failed").pipe(
                 Effect.annotateLogs("collection", collection_name),
                 Effect.annotateLogs("documentId", id),
@@ -60,7 +60,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
             )
           );
 
-          yield* Effect.forkDaemon(post_write);
+          yield* Effect.fork(post_write);
 
           return new_document;
         }).pipe(
@@ -69,6 +69,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
               new DatabaseError({ message: "Failed to create document", cause })
           )
         ),
+
       findById: storage.read,
 
       update: (id: string, data: Partial<Doc>) =>
