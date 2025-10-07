@@ -1,7 +1,6 @@
 import { FileSystem } from "@effect/platform";
 import { BunContext } from "@effect/platform-bun";
 import { Effect, Schema } from "effect";
-import type { Stringified } from "../types/json.js";
 import { Json } from "./json.js";
 
 export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
@@ -19,7 +18,6 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
        */
       readJsonFile: <A, I>(path: string, schema: Schema.Schema<A, I>) =>
         fs.readFileString(path).pipe(
-          Effect.map((text) => text as Stringified<A>),
           Effect.flatMap(json.parse),
           Effect.flatMap((parsedJson) => Schema.decode(schema)(parsedJson as I))
         ),
