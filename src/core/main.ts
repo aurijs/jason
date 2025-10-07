@@ -1,9 +1,9 @@
 import { FileSystem } from "@effect/platform";
 import { BunContext } from "@effect/platform-bun";
 import {
+  Chunk,
   Context,
   Effect,
-  Exit,
   Layer,
   Runtime,
   Schema,
@@ -15,6 +15,7 @@ import { JsonFile } from "../layers/json-file.js";
 import { Json } from "../layers/json.js";
 import { WriteAheadLog } from "../layers/wal.js";
 import { makeCollection } from "../make/collection.js";
+import { makeStorageManager } from "../make/storage-manager.js";
 import type {
   Collection,
   CollectionEffect,
@@ -34,54 +35,74 @@ const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const jsonFile = yield* JsonFile;
     const wal = yield* WriteAheadLog;
-    const configManager = yield* ConfigManager;
 
-    let lastSegment = 0;
-    yield* wal.replay.pipe(
-      Stream.runForEach(({ op, segment }) => {
-        lastSegment = Math.max(lastSegment, segment);
-        return Effect.gen(function* () {
-          const schema = yield* configManager.getCollectionSchema(
-            op.collection
-          );
-          const collectionPath = yield* configManager.getCollectionPath(
-            op.collection
-          );
+    const storage_managers = new Map<
+      string,
+      Effect.Effect.Success<ReturnType<typeof makeStorageManager>>
+    >();
 
-          switch (op._tag) {
-            case "CreateOp": {
-              const docPath = `${collectionPath}/${op.data.id}.json`;
-              return yield* jsonFile.writeJsonFile(docPath, schema, op.data);
-            }
-            case "UpdateOp": {
-              const docPath = `${collectionPath}/${op.id}.json`;
-              return yield* jsonFile.readJsonFile(docPath, schema).pipe(
-                Effect.flatMap((doc) =>
-                  doc
-                    ? jsonFile.writeJsonFile(docPath, schema, {
-                        ...doc,
-                        ...op.data
-                      })
-                    : Effect.void
-                ),
-                Effect.catchTag("SystemError", () => Effect.void)
-              );
-            }
-            case "DeleteOp": {
-              const docPath = `${collectionPath}/${op.id}.json`;
-              return yield* fs
-                .remove(docPath, { recursive: true })
-                .pipe(Effect.catchTag("SystemError", () => Effect.void));
-            }
-          }
-        });
-      })
-    );
+    const getStorageManager = (collectionName: string) =>
+      Effect.gen(function* () {
+        if (storage_managers.has(collectionName)) {
+          return storage_managers.get(collectionName)!;
+        }
+        const storageManager = yield* makeStorageManager<any>(collectionName);
+        storage_managers.set(collectionName, storageManager);
+        return storageManager;
+      });
 
-    if (lastSegment > 0) {
-      yield* wal.checkpoint(lastSegment);
+    let last_segment = 0;
+
+    const all_ops = yield* wal.replay.pipe(Stream.runCollect);
+
+    if (all_ops.length > 0) {
+      last_segment = Chunk.reduce(all_ops, 0, (max, { segment }) =>
+        Math.max(max, segment)
+      );
+
+      const grouped_by_document = Object.groupBy(all_ops, ({ op }) => {
+        const id = op._tag === "CreateOp" ? op.data.id : op.id;
+        return `${op.collection}/${id}}`;
+      });
+
+      yield* Effect.all(
+        Object.values(grouped_by_document).map((ops) =>
+          Effect.forEach(
+            ops!,
+            ({ op }) =>
+              Effect.gen(function* () {
+                const storage = yield* getStorageManager(op.collection);
+                switch (op._tag) {
+                  case "CreateOp": {
+                    return yield* storage.write(op.data.id as string, op.data);
+                  }
+                  case "UpdateOp": {
+                    return yield* storage.read(op.id).pipe(
+                      Effect.flatMap((doc) =>
+                        doc
+                          ? storage.write(op.id, { ...doc, ...op.data })
+                          : Effect.void
+                      ),
+                      Effect.catchTag("SystemError", () => Effect.void)
+                    );
+                  }
+                  case "DeleteOp": {
+                    return yield* storage
+                      .remove(op.id)
+                      .pipe(Effect.catchTag("SystemError", () => Effect.void));
+                  }
+                }
+              }),
+            { discard: true }
+          )
+        ),
+        { concurrency: 1, discard: true }
+      );
+    }
+
+    if (last_segment > 0) {
+      yield* wal.checkpoint(last_segment);
     }
 
     const collection_names = config.collections
@@ -101,11 +122,11 @@ const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
       [K in keyof T]: T[K] extends Schema.Schema<any, infer A> ? A : any;
     };
 
-    const databaseService: DatabaseEffect<CollectionsSchema> = {
+    const database_service: DatabaseEffect<CollectionsSchema> = {
       collections: collection_services as any
     };
 
-    return databaseService;
+    return database_service;
   });
 
 export const createJasonDBLayer = <
