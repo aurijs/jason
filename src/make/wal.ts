@@ -57,8 +57,6 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
 
     const queue = yield* Queue.unbounded<WriteRequest>();
 
-    // const write_semaphore = yield* Effect.makeSemaphore(1);
-
     const file_state_ref = yield* Ref.make<{
       segment: number;
       handle: FileSystem.File;
