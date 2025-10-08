@@ -4,6 +4,7 @@ import {
   Chunk,
   Context,
   Effect,
+  Exit,
   Layer,
   Runtime,
   Schema,
@@ -196,16 +197,18 @@ export const createJasonDB = async <
     Layer.build(layer).pipe(Scope.extend(scope))
   );
 
-  const runtime = Runtime.make({ ...Runtime.defaultRuntime, context });
+  const context_with_scope = Context.add(context, Scope.Scope, scope);
+  const runtime = Runtime.make({
+    ...Runtime.defaultRuntime,
+    context: context_with_scope
+  });
   const run = Runtime.runPromise(runtime);
 
-  const effect_base_db = (await run(JasonDB)) as DatabaseEffect<
-    InferCollections<T>
-  >;
+  const effect_base_db = await run(JasonDB);
 
-  const promise_based_collection: {
+  const promise_based_collection = {} as {
     [K in keyof InferCollections<T>]: Collection<InferCollections<T>[K]>;
-  } = {} as any;
+  };
 
   for (const name in effect_base_db.collections) {
     const effect_based_collection = effect_base_db.collections[name];
@@ -214,10 +217,10 @@ export const createJasonDB = async <
       createPromiseClient(effect_based_collection, run);
   }
 
-  const promise_based_db = {
-    collections: promise_based_collection
+  return {
+    collections: promise_based_collection,
+    [Symbol.asyncDispose]: async () => {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+    }
   };
-
-
-  return promise_based_db as Database<InferCollections<T>>;
 };
