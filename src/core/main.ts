@@ -218,7 +218,6 @@ export const createJasonDB = async <
     collections: promise_based_collection
   };
 
-  // const dispode = () => Effect.runPromise(Scope.close(scope, Exit.void));
 
   return promise_based_db as Database<InferCollections<T>>;
 };
