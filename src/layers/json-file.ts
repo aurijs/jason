@@ -1,6 +1,7 @@
 import { FileSystem } from "@effect/platform";
 import { BunContext } from "@effect/platform-bun";
 import { Effect, Schema } from "effect";
+import { AtomicWriter } from "./atomic-writer.js";
 import { Json } from "./json.js";
 
 export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
@@ -8,6 +9,7 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
   effect: Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const json = yield* Json;
+    const atomicWriter = yield* AtomicWriter;
 
     return {
       /**
@@ -33,7 +35,7 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
       ) =>
         Schema.encode(schema)(data).pipe(
           Effect.flatMap(json.stringify),
-          Effect.flatMap((content) => fs.writeFileString(path, content)),
+          Effect.flatMap((content) => atomicWriter.write(path, content)),
           Effect.asVoid
         )
     };
