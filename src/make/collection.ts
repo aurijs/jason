@@ -34,7 +34,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
 
       create: (data: Doc) =>
         Effect.gen(function* () {
-          const id = crypto.randomUUID() as string;
+          const id = (data.id as string) ?? crypto.randomUUID();
           const new_document = { ...data, id } as Doc;
 
           yield* wal.log({
@@ -52,15 +52,11 @@ export const makeCollection = <Doc extends Record<string, any>>(
             { discard: true, concurrency: "unbounded" }
           ).pipe(
             Effect.catchAllCause((cause) =>
-              Effect.logError("Background WAL application failed").pipe(
-                Effect.annotateLogs("collection", collection_name),
-                Effect.annotateLogs("documentId", id),
-                Effect.annotateLogs("cause", cause)
-              )
+              Effect.logError("Background WAL application failed", cause)
             )
           );
 
-          yield* Effect.fork(post_write);
+          yield* Effect.forkScoped(post_write);
 
           return new_document;
         }).pipe(

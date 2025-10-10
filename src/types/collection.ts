@@ -3,7 +3,7 @@ import type {
   PlatformError,
   SystemError
 } from "@effect/platform/Error";
-import { Schema, type Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { DatabaseError, JsonError } from "../core/errors.js";
 import type { ParseSchemaString, SchemaOrString } from "./schema.js";
 import type { ParseError } from "effect/ParseResult";
@@ -68,13 +68,13 @@ export interface CollectionEffect<Doc> {
    * @param data The data for the new document, excluding the 'id'.
    * @returns An `Effect` that resolves to the created document or fails with an `Error`.
    */
-  readonly create: (data: Doc) => Effect.Effect<Doc, DatabaseError>;
+  create: (data: Doc) => Effect.Effect<Doc, DatabaseError>;
   /**
    * Retrieves a document by its ID.
    * @param id The ID of the document to retrieve.
    * @returns An `Effect` that resolves to the document or `undefined` if not found, and can fail with an `Error`.
    */
-  readonly findById: (
+  findById: (
     id: string
   ) => Effect.Effect<
     Doc | undefined,
@@ -86,7 +86,7 @@ export interface CollectionEffect<Doc> {
    * @param data The partial data to update in the document.
    * @returns An `Effect` that resolves to the updated document or `undefined` if not found, and can fail with a `DatabaseError`.
    */
-  readonly update: (
+  update: (
     id: string,
     data: Partial<Doc>
   ) => Effect.Effect<Doc | undefined, DatabaseError>;
@@ -95,26 +95,26 @@ export interface CollectionEffect<Doc> {
    * @param id The ID of the document to delete.
    * @returns An `Effect` that resolves to `true` if the document was deleted, `false` otherwise, and can fail with a `DatabaseError`.
    */
-  readonly delete: (id: string) => Effect.Effect<boolean, DatabaseError>;
+  delete: (id: string) => Effect.Effect<boolean, DatabaseError>;
   /**
    * Finds documents based on query options.
    * @param options Query options for filtering, ordering, and pagination.
    * @returns An `Effect` that resolves to an array of documents and can fail with an `Error`.
    */
-  readonly find: (options: QueryOptions<Doc>) => Effect.Effect<Doc[], Error>;
+  find: (options: QueryOptions<Doc>) => Effect.Effect<Doc[], Error>;
 
   /**
    * Checks if a document with the given ID exists.
    * @param id The ID of the document to check.
    * @returns An `Effect` that resolves to `true` if the document exists, `false` otherwise, and can fail with a `PlatformError`.
    */
-  readonly has: (id: string) => Effect.Effect<boolean, PlatformError>;
+  has: (id: string) => Effect.Effect<boolean, PlatformError>;
   /**
    * Finds a single document based on query options.
    * @param options Query options for filtering and ordering.
    * @returns An `Effect` that resolves to a single document or `undefined` if not found, and can fail with a `PlatformError`.
    */
-  readonly findOne: (
+  findOne: (
     options: QueryOptions<Doc>
   ) => Effect.Effect<Doc | undefined, PlatformError>;
 }
@@ -128,14 +128,14 @@ export interface Collection<Doc> {
    * @param data - The data to be stored in the document.
    * @returns The created document.
    */
-  readonly create: (data: Omit<Doc, "id">) => Promise<Doc>;
+  create: (data: Doc) => Promise<Doc>;
 
   /**
    * Retrieves a document by its id.
    * @param id - The id of the document to retrieve.
    * @returns The retrieved document, or `undefined` if not found.
    */
-  readonly findById: (id: string) => Promise<Doc | undefined>;
+  findById: (id: string) => Promise<Doc | undefined>;
 
   /**
    * Updates a document by its id.
@@ -143,7 +143,7 @@ export interface Collection<Doc> {
    * @param data - The data to update in the document.
    * @returns The updated document, or `undefined` if the document with the given id was not found.
    */
-  readonly update: (
+  update: (
     id: string,
     data: Partial<Omit<Doc, "id">>
   ) => Promise<Doc | undefined>;
@@ -153,28 +153,28 @@ export interface Collection<Doc> {
    * @param id - The id of the document to delete.
    * @returns A promise that resolves to `true` if the document was deleted, `false` otherwise.
    */
-  readonly delete: (id: string) => Promise<boolean>;
+  delete: (id: string) => Promise<boolean>;
 
   /**
    * Finds documents based on the provided query options.
    * @param options - Query options including filtering, ordering, skipping, and limiting.
    * @returns A promise that resolves to an array of documents.
    */
-  readonly find: (options: QueryOptions<Doc>) => Promise<Doc[]>;
+  find: (options: QueryOptions<Doc>) => Promise<Doc[]>;
 
   /**
    * Checks if a document with the given id exists in the collection.
    * @param id The id of the document to check.
    * @returns A promise that resolves to `true` if the document exists, `false` otherwise.
    */
-  readonly has: (id: string) => Promise<boolean>;
+  has: (id: string) => Promise<boolean>;
 
   /**
    * Finds a single document based on the provided query options.
    * @param options - Query options including filtering and ordering.
    * @returns A promise that resolves to a single document or undefined if not found.
    */
-  readonly findOne: (options: QueryOptions<Doc>) => Promise<Doc | undefined>;
+  findOne: (options: QueryOptions<Doc>) => Promise<Doc | undefined>;
 }
 
 /**
@@ -185,11 +185,11 @@ export interface Collection<Doc> {
  * @template T - The type of the `collections` configuration object.
  */
 export type InferCollections<T extends Record<string, SchemaOrString>> = {
-  [K in keyof T]: T[K] extends Schema.Schema<any, infer A>
-    ? A
-    : T[K] extends string
-      ? ParseSchemaString<T[K]>
-      : any;
+  [K in keyof T]: T[K] extends Schema.Schema<infer A, any>
+  ? A
+  : T[K] extends string
+  ? ParseSchemaString<T[K]>
+  : any;
 };
 
 /**
@@ -204,7 +204,7 @@ export interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
    *  base_path: "db_dir",
    * });
    */
-  readonly base_path: string;
+  base_path: string;
   /**
    * A record defining the schemas for the database collections.
    *
@@ -256,5 +256,5 @@ export interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
    *
    * All defined schemas are validated at runtime using `Effect.Schema`.
    */
-  readonly collections: T;
+  collections: T;
 }
