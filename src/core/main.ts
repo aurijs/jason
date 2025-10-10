@@ -1,13 +1,14 @@
 import { FileSystem } from "@effect/platform";
-import { BunContext } from "@effect/platform-bun";
+import { NodeContext } from "@effect/platform-node";
 import {
-  Chunk,
   Context,
   Effect,
   Exit,
+  GroupBy,
   Layer,
+  Ref,
   Runtime,
-  Schema,
+  type Schema,
   Scope,
   Stream
 } from "effect";
@@ -53,27 +54,22 @@ const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
         return storageManager;
       });
 
-    let last_segment = 0;
+    const last_segment = yield* Ref.make(0);
 
-    const all_ops = yield* wal.replay.pipe(Stream.runCollect);
-
-    if (all_ops.length > 0) {
-      last_segment = Chunk.reduce(all_ops, 0, (max, { segment }) =>
-        Math.max(max, segment)
-      );
-
-      const grouped_by_document = Object.groupBy(all_ops, ({ op }) => {
-        const id = op._tag === "CreateOp" ? op.data.id : op.id;
-        return `${op.collection}/${id}}`;
-      });
-
-      yield* Effect.all(
-        Object.values(grouped_by_document).map((ops) =>
-          Effect.forEach(
-            ops!,
-            ({ op }) =>
+    const replay_effect = wal.replay.pipe(
+      Stream.tap(({ segment }) => Ref.set(last_segment, Math.max(segment, 0))),
+      Stream.groupByKey(
+        ({ op }) =>
+          `${op.collection}/${op._tag === "CreateOp" ? op.data.id : op.id}`,
+        { bufferSize: 8192 }
+      ),
+      (grouped_stream) =>
+        GroupBy.evaluate(grouped_stream, (_key, stream) =>
+          Stream.fromEffect(
+            Stream.runForEach(stream, ({ op }) =>
               Effect.gen(function* () {
                 const storage = yield* getStorageManager(op.collection);
+
                 switch (op._tag) {
                   case "CreateOp": {
                     return yield* storage.write(op.data.id as string, op.data);
@@ -94,16 +90,18 @@ const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
                       .pipe(Effect.catchTag("SystemError", () => Effect.void));
                   }
                 }
-              }),
-            { discard: true }
+              })
+            )
           )
         ),
-        { concurrency: 1, discard: true }
-      );
-    }
+      Stream.runDrain
+    );
 
-    if (last_segment > 0) {
-      yield* wal.checkpoint(last_segment);
+    yield* replay_effect;
+
+    const final_last_segment = yield* Ref.get(last_segment);
+    if (final_last_segment > 0) {
+      yield* wal.checkpoint(final_last_segment);
     }
 
     const collection_names = config.collections
@@ -139,7 +137,7 @@ export const createJasonDBLayer = <
 
   const BaseInfraLayer = Layer.mergeAll(
     JsonFile.Default,
-    BunContext.layer,
+    NodeContext.layer,
     Json.Default,
     WriteAheadLog.Default
   );
@@ -158,13 +156,13 @@ export const createJasonDBLayer = <
  * @param run A function that takes an Effect and returns a Promise of the Effect's result.
  * @returns A Record where each key is a function that returns a Promise of the Effect's result.
  */
-function createPromiseClient<Doc>(
-  effect_service: CollectionEffect<Doc>,
+function createPromiseClient<T extends CollectionEffect<any>>(
+  effect_service: CollectionEffect<T>,
   run: (effect: Effect.Effect<any, any, any>) => Promise<any>
-): Collection<Doc> {
-  const promise_client: any = {};
+) {
+  const promise_client = {} as Collection<any>;
 
-  (Object.keys(effect_service) as Array<keyof CollectionEffect<Doc>>).forEach(
+  (Object.keys(effect_service) as Array<keyof CollectionEffect<T>>).forEach(
     (key) => {
       const prop = effect_service[key];
 
