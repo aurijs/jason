@@ -101,9 +101,7 @@ export type ParseSchemaString<T extends string> = UnionToIntersection<
 >;
 
 /**
- * Represents a schema definition, which can be either 
+ * Represents a schema definition, which can be either
  * an Effect Schema.Struct or a string.
  */
-export type SchemaOrString<T extends Schema.Struct.Fields = any> =
-  | Schema.Struct<T>
-  | string;
+export type SchemaOrString = string | Schema.Schema<any, any>;
