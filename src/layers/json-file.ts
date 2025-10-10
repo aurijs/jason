@@ -1,10 +1,10 @@
 import { FileSystem } from "@effect/platform";
-import { BunContext } from "@effect/platform-bun";
+import { NodeContext } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
 import { Json } from "./json.js";
 
 export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
-  dependencies: [Json.Default, BunContext.layer],
+  dependencies: [Json.Default, NodeContext.layer],
   effect: Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const json = yield* Json;

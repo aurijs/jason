@@ -2,11 +2,11 @@ import { Path } from "@effect/platform";
 import { Effect } from "effect";
 import { makeWal } from "../make/wal.js";
 import { ConfigManager } from "./config.js";
-import { BunContext } from "@effect/platform-bun";
+import { NodeContext } from "@effect/platform-node";
 import { Json } from "./json.js";
 
 export class WriteAheadLog extends Effect.Service<WriteAheadLog>()("WriteAheadLog", {
-  dependencies: [BunContext.layer, Json.Default],
+  dependencies: [NodeContext.layer, Json.Default],
   scoped: Effect.gen(function* () {
     const path = yield* Path.Path;
     const config = yield* ConfigManager;
