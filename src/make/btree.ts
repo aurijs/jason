@@ -1,6 +1,7 @@
 import { FileSystem } from "@effect/platform";
-import { Effect, Ref, Schema } from "effect";
-import type { Mutable } from "../types/utils.js";
+import { Effect, Ref } from "effect";
+import * as Schema from "effect/Schema";
+import type { DeepMutable } from "effect/Types";
 import { Json } from "../layers/json.js";
 
 const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
@@ -12,10 +13,12 @@ const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
     children: Schema.Array(Schema.String)
   });
 
-type BTreeNode<K> = Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>;
+type BTreeNode<K> = DeepMutable<
+  Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>
+>;
 
 const RootPointerSchema = Schema.Struct({ root_id: Schema.String });
-type RootPointer = Mutable<typeof RootPointerSchema.Type>;
+type RootPointer = DeepMutable<typeof RootPointerSchema.Type>;
 
 export const makeBtreeService = <K>(
   three_path: string,
@@ -27,6 +30,8 @@ export const makeBtreeService = <K>(
     const jsonService = yield* Json;
     const node_schema = BTreeNodeSchema(key_schema);
     const root_pointer_path = `${three_path}/_root.json`;
+
+    const semaphore = yield* Effect.makeSemaphore(1);
 
     yield* fs.makeDirectory(three_path, { recursive: true });
 
@@ -98,33 +103,20 @@ export const makeBtreeService = <K>(
         const new_sibling = yield* createNode(full_child.is_leaf);
         const median_index = order - 1;
 
-        (parent.keys as string[]).splice(
-          child_index,
-          0,
-          full_child.keys[median_index]
-        );
-        (parent.values as string[]).splice(
-          child_index,
-          0,
-          full_child.values[median_index]
-        );
-        (parent.children as string[]).splice(
-          child_index + 1,
-          0,
-          new_sibling.id
-        );
+        parent.keys.splice(child_index, 0, full_child.keys[median_index]);
+        parent.values.splice(child_index, 0, full_child.values[median_index]);
+        parent.children.splice(child_index + 1, 0, new_sibling.id);
 
-        // @ts-expect-error will fix later
-        new_sibling.keys = (full_child.keys as K[]).splice(median_index + 1);
-        // @ts-expect-error will fix later
-        new_sibling.values = full_child.values.splice(median_index + 1);
-        (full_child.keys as K[]).length = median_index;
-        // @ts-expect-error will fix later
-        full_child.values.length = median_index;
-
+        new_sibling.keys = full_child.keys.slice(median_index + 1);
+        new_sibling.values = full_child.values.slice(median_index + 1);
         if (!full_child.is_leaf) {
-          // @ts-expect-error will fix later
-          new_sibling.children = full_child.children.splice(median_index + 1);
+          new_sibling.children = full_child.children.slice(median_index + 1);
+        }
+
+        full_child.keys = full_child.keys.slice(0, median_index);
+        full_child.values = full_child.values.slice(0, median_index);
+        if (!full_child.is_leaf) {
+          full_child.children = full_child.children.slice(0, median_index + 1);
         }
 
         yield* Effect.all(
@@ -199,30 +191,36 @@ export const makeBtreeService = <K>(
        * @param value The value associated with the key.
        * @returns An effect that completes when the insertion is done.
        */
-      insert: (key: K, value?: string) =>
-        Effect.gen(function* () {
+      insert: (key: K, value?: string) => {
+        const insert_effect = Effect.gen(function* () {
           const root_id = yield* Ref.get(rootIdRef);
           let root = yield* readNode(root_id);
 
           if (root.keys.length === 2 * order - 1) {
             const new_root = yield* createNode(false);
-            (new_root.children as string[]).push(root.id);
+            new_root.children.push(root.id);
+
             yield* splitChild(new_root, 0, root);
             yield* updateRootId(new_root.id);
             yield* insertNonFull(new_root, key, value as string);
           } else {
-            yield* insertNonFull(root, key, value as string);
+            yield* insertNonFull(root, key, value);
           }
-        }),
+        });
 
+        return semaphore.withPermits(1)(insert_effect);
+      },
       /**
        * Finds the value associated with a given key in the B-tree.
        * @param key The key to search for.
        * @returns - The value associated with the key, or undefined if not found.
        */
-      find: (key: K) =>
-        Ref.get(rootIdRef).pipe(
+      find: (key: K) => {
+        const find_effect = Ref.get(rootIdRef).pipe(
           Effect.flatMap((rootId) => findInNode(rootId, key))
-        )
+        );
+
+        return semaphore.withPermits(1)(find_effect);
+      }
     };
   });

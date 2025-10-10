@@ -135,7 +135,7 @@ export const makeWal = (wal_path: string, max_segment_size: number) =>
                 Effect.map((l) => l + "\n")
               )
             ),
-            { concurrency: "unbounded" }
+            { concurrency: "unbounded", batching: true }
           );
 
           const content = Buffer.from(lines.join(""));
