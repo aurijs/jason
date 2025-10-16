@@ -7,6 +7,14 @@ interface StorageManagerOptions {
   readonly file_filter?: (filename: string) => boolean;
 }
 
+interface StorageManager<Doc> {
+  readonly read: (id: string) => Effect.Effect<Doc | undefined, Error>;
+  readonly write: (id: string, doc: any) => Effect.Effect<void, Error>;
+  readonly remove: (id: string) => Effect.Effect<void, Error>;
+  readonly exists: (id: string) => Effect.Effect<boolean, Error>;
+  readonly readAll: Stream.Stream<Doc, Error>;
+}
+
 export const makeStorageManager = <Doc extends Record<string, any>>(
   collection_name: string,
   options?: StorageManagerOptions
@@ -46,5 +54,5 @@ export const makeStorageManager = <Doc extends Record<string, any>>(
         Stream.mapEffect(read, { concurrency: "unbounded" }),
         Stream.filter((doc): doc is Doc => doc !== undefined)
       )
-    };
+    } as StorageManager<Doc>;
   });
