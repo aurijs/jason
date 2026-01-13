@@ -1,6 +1,6 @@
 # Plan: Effect.ts Integration Refactor
 
-## Phase 1: Foundation and Infrastructure
+## Phase 1: Foundation and Infrastructure [checkpoint: 9eb0421]
 - [x] Task: Define Core Error Schema using Effect.ts Schema b0e8d05
 - [x] Task: Write Tests for Error Schema b0e8d05
 - [x] Task: Implement Error Schema b0e8d05
