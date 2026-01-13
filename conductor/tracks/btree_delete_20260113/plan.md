@@ -11,11 +11,11 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Test Infrastructure & Basic Scenarios' (Protocol in workflow.md) 36861ac
 
 ## Phase 2: Complex Deletion & Rebalancing
-- [ ] Task: Implement Internal Node Deletion
-    - [ ] Sub-task: Write failing test: Delete key from internal node (requires replacing with predecessor/successor).
-    - [ ] Sub-task: Implement logic to swap with predecessor/successor and delete from child.
-    - [ ] Sub-task: Verify tests pass.
-- [ ] Task: Implement Rebalancing (Borrow & Merge)
+- [x] Task: Implement Internal Node Deletion 0f3d4c4
+    - [x] Sub-task: Write failing test: Delete key from internal node (requires replacing with predecessor/successor).
+    - [x] Sub-task: Implement logic to swap with predecessor/successor and delete from child.
+    - [x] Sub-task: Verify tests pass.
+- [~] Task: Implement Rebalancing (Borrow & Merge)
     - [ ] Sub-task: Write failing test: Delete causing underflow (requires borrowing from sibling).
     - [ ] Sub-task: Write failing test: Delete causing underflow (requires merging with sibling).
     - [ ] Sub-task: Write failing test: Delete causing root height reduction.
