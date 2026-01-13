@@ -1,5 +1,14 @@
 import { Effect, Schema } from "effect";
 import type { IndexDefinition } from "./types/metadata.js";
+import type { StandardSchemaV1 } from "./types/schema.js";
+
+/**
+ * Detects if a schema is a Standard Schema compliant validator.
+ * @param schema The schema to check.
+ */
+export function isStandardSchema(schema: any): schema is StandardSchemaV1 {
+  return schema !== null && typeof schema === "object" && "~standard" in schema;
+}
 
 const schema_map = {
   string: Schema.String,

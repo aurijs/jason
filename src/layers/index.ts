@@ -23,10 +23,13 @@ export const makeIndexService = <Doc extends { id?: string }>(
               def.indexed || def.unique || def.primary_key || def.multi_entry
           )
           .map(([field_name]) => {
-            const key_schema = doc_schema.fields[field_name];
+            const key_schema =
+              "fields" in doc_schema
+                ? (doc_schema as any).fields[field_name]
+                : undefined;
             if (!key_schema) {
               throw new Error(
-                `Field ${field_name} does not exist in document schema`
+                `Field ${field_name} does not exist in document schema or automatic indexing is not supported for this schema type`
               );
             }
 

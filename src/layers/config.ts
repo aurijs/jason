@@ -7,6 +7,9 @@ import {
   parseSchemaString
 } from "../utils.js";
 import type { IndexDefinition } from "../types/metadata.js";
+import type { StandardSchemaV1 } from "../types/schema.js";
+
+export type AnySchema = Schema.Schema<any, any> | StandardSchemaV1<any, any>;
 
 export class ConfigManager extends Effect.Service<ConfigManager>()(
   "ConfigManager",
@@ -66,11 +69,7 @@ export class ConfigManager extends Effect.Service<ConfigManager>()(
            * @return The schema of a specific collection
            */
           getCollectionSchema: (collection_name: string) =>
-            Effect.succeed(
-              all_schemas[collection_name] as Schema.Struct<
-                Record<string, Schema.Schema<any, any>>
-              >
-            ),
+            Effect.succeed(all_schemas[collection_name] as AnySchema),
 
           /**
            * @param collection_name - The name of the collection

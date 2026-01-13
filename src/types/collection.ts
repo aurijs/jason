@@ -5,7 +5,11 @@ import type {
 } from "@effect/platform/Error";
 import { Effect, Schema } from "effect";
 import type { DatabaseError, JsonError } from "../core/errors.js";
-import type { ParseSchemaString, SchemaOrString } from "./schema.js";
+import type {
+  ParseSchemaString,
+  SchemaOrString,
+  StandardSchemaV1
+} from "./schema.js";
 import type { ParseError } from "effect/ParseResult";
 
 import type { FilterExpression } from "./query.js";
@@ -263,9 +267,11 @@ export interface Collection<Doc> {
 export type InferCollections<T extends Record<string, SchemaOrString>> = {
   [K in keyof T]: T[K] extends Schema.Schema<infer A, any>
     ? A
-    : T[K] extends string
-      ? ParseSchemaString<T[K]>
-      : any;
+    : T[K] extends StandardSchemaV1<any, infer A>
+      ? A
+      : T[K] extends string
+        ? ParseSchemaString<T[K]>
+        : any;
 };
 
 /**

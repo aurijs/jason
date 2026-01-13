@@ -101,7 +101,44 @@ export type ParseSchemaString<T extends string> = UnionToIntersection<
 >;
 
 /**
- * Represents a schema definition, which can be either
- * an Effect Schema.Struct or a string.
+ * Represents a standard schema compliant with @standard-schema/spec.
  */
-export type SchemaOrString = string | Schema.Schema<any, any>;
+export interface StandardSchemaV1<Input = any, Output = any> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (
+      value: unknown
+    ) =>
+      | StandardSchemaV1.Result<Output>
+      | Promise<StandardSchemaV1.Result<Output>>;
+    readonly types?: {
+      readonly input: Input;
+      readonly output: Output;
+    };
+  };
+}
+
+export namespace StandardSchemaV1 {
+  export type Result<Output> = SuccessResult<Output> | FailureResult;
+  export interface SuccessResult<Output> {
+    readonly value: Output;
+    readonly issues?: undefined;
+  }
+  export interface FailureResult {
+    readonly issues: ReadonlyArray<Issue>;
+  }
+  export interface Issue {
+    readonly message: string;
+    readonly path?: ReadonlyArray<PropertyKey>;
+  }
+}
+
+/**
+ * Represents a schema definition, which can be either
+ * an Effect Schema.Struct, a standard-schema compliant validator, or a string.
+ */
+export type SchemaOrString =
+  | string
+  | Schema.Schema<any, any>
+  | StandardSchemaV1<any, any>;

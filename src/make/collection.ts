@@ -218,26 +218,26 @@ export const makeCollection = <Doc extends Record<string, any>>(
           const id = (data.id as string) ?? crypto.randomUUID();
           const new_document = { ...data, id } as Doc;
 
+          // Perform storage write first to ensure validation passes before logging to WAL
+          // Actually, WAL should probably be first for durability, but if validation fails,
+          // we don't want it in WAL.
+          // Let's do validation explicitly if we want, or just let storage.write handle it.
+
+          yield* storage.write(id, new_document);
+
           yield* wal.log({
             _tag: "CreateOp",
             collection: collection_name,
             data: new_document
           });
 
-          const post_write = Effect.all(
+          yield* Effect.all(
             [
-              storage.write(id, new_document),
               metadataService.incrementCount,
               indexService.update(undefined, new_document)
             ],
             { discard: true, concurrency: "unbounded" }
-          ).pipe(
-            Effect.catchAllCause((cause) =>
-              Effect.logError("Background WAL application failed", cause)
-            )
           );
-
-          yield* post_write;
 
           return new_document;
         }).pipe(
@@ -259,14 +259,14 @@ export const makeCollection = <Doc extends Record<string, any>>(
             ...data
           } as Doc;
 
+          yield* storage.write(id, new_document);
+
           yield* wal.log({
             _tag: "UpdateOp",
             collection: collection_name,
             id,
             data
           });
-
-          yield* storage.write(id, new_document);
 
           yield* Effect.all(
             [
