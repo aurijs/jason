@@ -1,7 +1,6 @@
 import type {
   Collection,
-  CollectionEffect,
-  InferCollections
+  CollectionEffect
 } from "./collection.js";
 
 export interface DatabaseEffect<Collections extends Record<string, any>> {

@@ -2,7 +2,6 @@ import { BunContext } from "@effect/platform-bun";
 import { Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { createJasonDB, createJasonDBLayer, JasonDB } from "../src/core/main.js";
-import { FileSystem } from "@effect/platform";
 
 const UserSchema = Schema.Struct({
   id: Schema.String,

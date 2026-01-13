@@ -10,7 +10,6 @@ describe("BTree Service", () => {
     const program = Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
         const tempDir = yield* fs.makeTempDirectoryScoped();
 
         const TestLayer = Layer.mergeAll(

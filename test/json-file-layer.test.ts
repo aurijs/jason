@@ -134,7 +134,7 @@ describe("JsonFile Service", () => {
         const tempDir = yield* fs.makeTempDirectoryScoped();
         const filePath = path.join(tempDir, "malformed.json");
 
-        const malformedJson = '{\"name\": \"Jason\", \"age\": 42,}'; // Extra comma
+        const malformedJson = '{"name": "Jason", "age": 42,}'; // Extra comma
         yield* fs.writeFileString(filePath, malformedJson);
 
         const programToTest = jsonFile.readJsonFile(filePath, PersonSchema);
