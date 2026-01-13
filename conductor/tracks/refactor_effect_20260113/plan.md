@@ -20,7 +20,7 @@
 
 ## Phase 3: Collection and Query API
 - [x] Task: Refactor Collection CRUD operations to return Effects e65e860 - [x] Task: Write Tests for Collection e65e860 - [x] Task: Implement Refactor e65e860
-- [~] Task: Refactor Query engine to use Effect - [ ] Task: Write Tests for Query - [ ] Task: Implement Refactor
+- [x] Task: Refactor Query engine to use Effect 4e65882 - [x] Task: Write Tests for Query 4e65882 - [x] Task: Implement Refactor 4e65882
 - [ ] Task: Conductor - User Manual Verification 'Collection and Query API' (Protocol in workflow.md)
 
 ## Phase 4: Final Integration and Cleanup
