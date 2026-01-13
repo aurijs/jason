@@ -7,13 +7,15 @@
 - [x] Task: Define FileSystem and Config Layers b0e8d05
 - [x] Task: Write Tests for Layers b0e8d05
 - [x] Task: Implement Layers b0e8d05
-- [ ] Task: Conductor - User Manual Verification 'Foundation and Infrastructure' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Foundation and Infrastructure' (Protocol in workflow.md) 9eb0421
 
 ## Phase 2: Core Logic Refactoring
 - [x] Task: Refactor Storage Manager to use Effect
 - [x] Task: Write Tests for Storage Manager
 - [x] Task: Implement Refactor
-- [ ] Task: Refactor BTree implementation to use Effect - [ ] Task: Write Tests for BTree - [ ] Task: Implement Refactor
+- [x] Task: Refactor BTree implementation to use Effect b0e8d05
+- [x] Task: Write Tests for BTree b0e8d05
+- [x] Task: Implement Refactor b0e8d05
 - [ ] Task: Conductor - User Manual Verification 'Core Logic Refactoring' (Protocol in workflow.md)
 
 ## Phase 3: Collection and Query API
