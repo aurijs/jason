@@ -10,7 +10,9 @@
 - [ ] Task: Conductor - User Manual Verification 'Foundation and Infrastructure' (Protocol in workflow.md)
 
 ## Phase 2: Core Logic Refactoring
-- [ ] Task: Refactor Storage Manager to use Effect - [ ] Task: Write Tests for Storage Manager - [ ] Task: Implement Refactor
+- [x] Task: Refactor Storage Manager to use Effect
+- [x] Task: Write Tests for Storage Manager
+- [x] Task: Implement Refactor
 - [ ] Task: Refactor BTree implementation to use Effect - [ ] Task: Write Tests for BTree - [ ] Task: Implement Refactor
 - [ ] Task: Conductor - User Manual Verification 'Core Logic Refactoring' (Protocol in workflow.md)
 
