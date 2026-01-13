@@ -6,17 +6,23 @@ import { Json } from "../layers/json.js";
 import { DatabaseError } from "../core/errors.js";
 
 export const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
-  Schema.mutable(Schema.Struct({
-    id: Schema.String,
-    is_leaf: Schema.Boolean,
-    keys: Schema.mutable(Schema.Array(key_schema)),
-    values: Schema.mutable(Schema.Array(Schema.String)),
-    children: Schema.mutable(Schema.Array(Schema.String))
-  }));
+  Schema.mutable(
+    Schema.Struct({
+      id: Schema.String,
+      is_leaf: Schema.Boolean,
+      keys: Schema.mutable(Schema.Array(key_schema)),
+      values: Schema.mutable(Schema.Array(Schema.String)),
+      children: Schema.mutable(Schema.Array(Schema.String))
+    })
+  );
 
-export type BTreeNode<K> = Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>;
+export type BTreeNode<K> = Schema.Schema.Type<
+  ReturnType<typeof BTreeNodeSchema<K>>
+>;
 
-export const RootPointerSchema = Schema.mutable(Schema.Struct({ root_id: Schema.String }));
+export const RootPointerSchema = Schema.mutable(
+  Schema.Struct({ root_id: Schema.String })
+);
 export type RootPointer = Schema.Schema.Type<typeof RootPointerSchema>;
 
 export const makeBtreeService = <K>(
@@ -51,7 +57,11 @@ export const makeBtreeService = <K>(
         Effect.flatMap(jsonService.parse),
         Effect.flatMap((data) => Schema.decode(node_schema)(data)),
         Effect.mapError(
-          (e) => new DatabaseError({ message: `Failed to read node ${id}`, cause: e })
+          (e) =>
+            new DatabaseError({
+              message: `Failed to read node ${id}`,
+              cause: e
+            })
         )
       );
 
@@ -62,7 +72,11 @@ export const makeBtreeService = <K>(
           fs.writeFileString(`${three_path}/${node.id}.json`, content)
         ),
         Effect.mapError(
-          (e) => new DatabaseError({ message: `Failed to write node ${node.id}`, cause: e })
+          (e) =>
+            new DatabaseError({
+              message: `Failed to write node ${node.id}`,
+              cause: e
+            })
         )
       );
 
@@ -182,11 +196,56 @@ export const makeBtreeService = <K>(
         return yield* findInNode(node.children[i], key);
       });
 
-    const getPredecessor = (node: BTreeNode<K>, i: number): Effect.Effect<{ key: K, value: string }, DatabaseError | SystemError> =>
+    const findAllInNode = (
+      node_id: string,
+      key: K
+    ): Effect.Effect<string[], DatabaseError | SystemError> =>
+      Effect.gen(function* () {
+        const node = yield* readNode(node_id);
+        const results: string[] = [];
+        let i = 0;
+
+        while (i < node.keys.length) {
+          if (key === node.keys[i]) {
+            results.push(node.values[i]);
+            // Even if we find it in an internal node, we must check children
+            // because duplicates could be spread across children and siblings.
+            if (!node.is_leaf) {
+              const childResults = yield* findAllInNode(node.children[i], key);
+              results.push(...childResults);
+            }
+          } else if (key < node.keys[i]) {
+            // If key is smaller, it can only be in the left child
+            if (!node.is_leaf) {
+              const childResults = yield* findAllInNode(node.children[i], key);
+              results.push(...childResults);
+            }
+            // Since keys are sorted, we don't need to check further keys or children to the right
+            // UNLESS there are more duplicates in this node, but they would have been handled by the first 'if'
+            return results;
+          }
+          i++;
+        }
+
+        // If we reached the end, check the last child
+        if (!node.is_leaf) {
+          const childResults = yield* findAllInNode(node.children[i], key);
+          results.push(...childResults);
+        }
+
+        return results;
+      });
+
+    const getPredecessor = (
+      node: BTreeNode<K>,
+      i: number
+    ): Effect.Effect<{ key: K; value: string }, DatabaseError | SystemError> =>
       Effect.gen(function* () {
         let current = yield* readNode(node.children[i]);
         while (!current.is_leaf) {
-          current = yield* readNode(current.children[current.children.length - 1]);
+          current = yield* readNode(
+            current.children[current.children.length - 1]
+          );
         }
         return {
           key: current.keys[current.keys.length - 1],
@@ -194,7 +253,10 @@ export const makeBtreeService = <K>(
         };
       });
 
-    const getSuccessor = (node: BTreeNode<K>, i: number): Effect.Effect<{ key: K, value: string }, DatabaseError | SystemError> =>
+    const getSuccessor = (
+      node: BTreeNode<K>,
+      i: number
+    ): Effect.Effect<{ key: K; value: string }, DatabaseError | SystemError> =>
       Effect.gen(function* () {
         let current = yield* readNode(node.children[i + 1]);
         while (!current.is_leaf) {
@@ -206,7 +268,12 @@ export const makeBtreeService = <K>(
         };
       });
 
-    const borrowFromLeft = (parent: BTreeNode<K>, i: number, child: BTreeNode<K>, leftSibling: BTreeNode<K>) =>
+    const borrowFromLeft = (
+      parent: BTreeNode<K>,
+      i: number,
+      child: BTreeNode<K>,
+      leftSibling: BTreeNode<K>
+    ) =>
       Effect.gen(function* () {
         child.keys.unshift(parent.keys[i - 1]);
         child.values.unshift(parent.values[i - 1]);
@@ -217,10 +284,18 @@ export const makeBtreeService = <K>(
         parent.keys[i - 1] = leftSibling.keys.pop()!;
         parent.values[i - 1] = leftSibling.values.pop()!;
 
-        yield* Effect.all([writeNode(parent), writeNode(child), writeNode(leftSibling)], { concurrency: "inherit" });
+        yield* Effect.all(
+          [writeNode(parent), writeNode(child), writeNode(leftSibling)],
+          { concurrency: "inherit" }
+        );
       });
 
-    const borrowFromRight = (parent: BTreeNode<K>, i: number, child: BTreeNode<K>, rightSibling: BTreeNode<K>) =>
+    const borrowFromRight = (
+      parent: BTreeNode<K>,
+      i: number,
+      child: BTreeNode<K>,
+      rightSibling: BTreeNode<K>
+    ) =>
       Effect.gen(function* () {
         child.keys.push(parent.keys[i]);
         child.values.push(parent.values[i]);
@@ -231,10 +306,18 @@ export const makeBtreeService = <K>(
         parent.keys[i] = rightSibling.keys.shift()!;
         parent.values[i] = rightSibling.values.shift()!;
 
-        yield* Effect.all([writeNode(parent), writeNode(child), writeNode(rightSibling)], { concurrency: "inherit" });
+        yield* Effect.all(
+          [writeNode(parent), writeNode(child), writeNode(rightSibling)],
+          { concurrency: "inherit" }
+        );
       });
 
-    const merge = (parent: BTreeNode<K>, i: number, leftChild: BTreeNode<K>, rightChild: BTreeNode<K>) =>
+    const merge = (
+      parent: BTreeNode<K>,
+      i: number,
+      leftChild: BTreeNode<K>,
+      rightChild: BTreeNode<K>
+    ) =>
       Effect.gen(function* () {
         leftChild.keys.push(parent.keys[i]);
         leftChild.values.push(parent.values[i]);
@@ -249,13 +332,16 @@ export const makeBtreeService = <K>(
         parent.values.splice(i, 1);
         parent.children.splice(i + 1, 1);
 
-        yield* Effect.all([writeNode(parent), writeNode(leftChild)], { concurrency: "inherit" });
+        yield* Effect.all([writeNode(parent), writeNode(leftChild)], {
+          concurrency: "inherit"
+        });
         // NOTE: rightChild is now abandoned/garbage. In a real system we'd free its disk space.
       });
 
     const deleteFromNode = (
       node_id: string,
-      key: K
+      key: K,
+      value?: string
     ): Effect.Effect<boolean, DatabaseError | SystemError> =>
       Effect.gen(function* () {
         const node = yield* readNode(node_id);
@@ -264,64 +350,121 @@ export const makeBtreeService = <K>(
           i++;
         }
 
+        // 1. If key is in this node
         if (i < node.keys.length && key === node.keys[i]) {
-          if (node.is_leaf) {
-            (node.keys as K[]).splice(i, 1);
-            (node.values as string[]).splice(i, 1);
-            yield* writeNode(node);
-            return true;
+          // Find if the specific value is in this node
+          let foundIndex = -1;
+          if (value !== undefined) {
+            for (let j = i; j < node.keys.length && node.keys[j] === key; j++) {
+              if (node.values[j] === value) {
+                foundIndex = j;
+                break;
+              }
+            }
           } else {
-             const leftChild = yield* readNode(node.children[i]);
-             if (leftChild.keys.length >= order) {
-                 const pred = yield* getPredecessor(node, i);
-                 node.keys[i] = pred.key;
-                 node.values[i] = pred.value;
-                 yield* writeNode(node);
-                 return yield* deleteFromNode(leftChild.id, pred.key);
-             }
+            foundIndex = i;
+          }
 
-             const rightChild = yield* readNode(node.children[i + 1]);
-             if (rightChild.keys.length >= order) {
-                 const succ = yield* getSuccessor(node, i);
-                 node.keys[i] = succ.key;
-                 node.values[i] = succ.value;
-                 yield* writeNode(node);
-                 return yield* deleteFromNode(rightChild.id, succ.key);
-             }
-             
-             // Both have order - 1 keys. Merge them.
-             yield* merge(node, i, leftChild, rightChild);
-             return yield* deleteFromNode(leftChild.id, key);
+          if (foundIndex !== -1) {
+            if (node.is_leaf) {
+              (node.keys as K[]).splice(foundIndex, 1);
+              (node.values as string[]).splice(foundIndex, 1);
+              yield* writeNode(node);
+              return true;
+            } else {
+              // Internal node deletion
+              const leftChild = yield* readNode(node.children[foundIndex]);
+              if (leftChild.keys.length >= order) {
+                const pred = yield* getPredecessor(node, foundIndex);
+                node.keys[foundIndex] = pred.key;
+                node.values[foundIndex] = pred.value;
+                yield* writeNode(node);
+                return yield* deleteFromNode(
+                  leftChild.id,
+                  pred.key,
+                  pred.value
+                );
+              }
+
+              const rightChild = yield* readNode(node.children[foundIndex + 1]);
+              if (rightChild.keys.length >= order) {
+                const succ = yield* getSuccessor(node, foundIndex);
+                node.keys[foundIndex] = succ.key;
+                node.values[foundIndex] = succ.value;
+                yield* writeNode(node);
+                return yield* deleteFromNode(
+                  rightChild.id,
+                  succ.key,
+                  succ.value
+                );
+              }
+
+              yield* merge(node, foundIndex, leftChild, rightChild);
+              return yield* deleteFromNode(leftChild.id, key, value);
+            }
           }
         }
 
-        if (node.is_leaf) {
-          return false;
-        }
+        // 2. Not in this node or value mismatch in this node.
+        if (node.is_leaf) return false;
 
-        // Key is not in this internal node. Ensure child node has enough keys.
-        let child = yield* readNode(node.children[i]);
-        if (child.keys.length < order) {
-            // Rebalance child
-            const leftSibling = i > 0 ? yield* readNode(node.children[i - 1]) : undefined;
-            const rightSibling = i < node.keys.length ? yield* readNode(node.children[i + 1]) : undefined;
+        // If we have a specific value, it could be in ANY child where key could exist.
+        // For standard B-Tree, this is child i, and if node.keys[i] == key, potentially child i+1 etc.
 
-            if (leftSibling && leftSibling.keys.length >= order) {
-                yield* borrowFromLeft(node, i, child, leftSibling);
-            } else if (rightSibling && rightSibling.keys.length >= order) {
-                yield* borrowFromRight(node, i, child, rightSibling);
-            } else {
-                // Merge
+        const tryDelete = (
+          idx: number
+        ): Effect.Effect<boolean, DatabaseError | SystemError> =>
+          Effect.gen(function* () {
+            const currentNode = yield* readNode(node_id);
+            if (idx >= currentNode.children.length) return false;
+
+            let child = yield* readNode(currentNode.children[idx]);
+            if (child.keys.length < order) {
+              const leftSibling =
+                idx > 0
+                  ? yield* readNode(currentNode.children[idx - 1])
+                  : undefined;
+              const rightSibling =
+                idx < currentNode.keys.length
+                  ? yield* readNode(currentNode.children[idx + 1])
+                  : undefined;
+
+              if (leftSibling && leftSibling.keys.length >= order) {
+                yield* borrowFromLeft(currentNode, idx, child, leftSibling);
+              } else if (rightSibling && rightSibling.keys.length >= order) {
+                yield* borrowFromRight(currentNode, idx, child, rightSibling);
+              } else {
                 if (leftSibling) {
-                    yield* merge(node, i - 1, leftSibling, child);
-                    child = leftSibling;
+                  yield* merge(currentNode, idx - 1, leftSibling, child);
+                  child = leftSibling;
+                  return yield* deleteFromNode(child.id, key, value);
                 } else if (rightSibling) {
-                    yield* merge(node, i, child, rightSibling);
+                  yield* merge(currentNode, idx, child, rightSibling);
+                  // child is still child
                 }
+              }
             }
+            return yield* deleteFromNode(child.id, key, value);
+          });
+
+        // Try child i
+        const deleted = yield* tryDelete(i);
+        if (deleted) return true;
+
+        // If value is specified, we might need to check subsequent children if they also match the key
+        if (value !== undefined) {
+          let nextIdx = i + 1;
+          while (
+            nextIdx <= node.keys.length &&
+            node.keys[nextIdx - 1] === key
+          ) {
+            const deletedNext = yield* tryDelete(nextIdx);
+            if (deletedNext) return true;
+            nextIdx++;
+          }
         }
 
-        return yield* deleteFromNode(child.id, key);
+        return false;
       });
 
     return {
@@ -364,24 +507,37 @@ export const makeBtreeService = <K>(
         return semaphore.withPermits(1)(find_effect);
       },
       /**
+       * Finds all values associated with a given key in the B-tree.
+       * @param key The key to search for.
+       * @returns - An array of values associated with the key.
+       */
+      findAll: (key: K) => {
+        const find_all_effect = Ref.get(rootIdRef).pipe(
+          Effect.flatMap((rootId) => findAllInNode(rootId, key))
+        );
+
+        return semaphore.withPermits(1)(find_all_effect);
+      },
+      /**
        * Deletes a key from the B-tree.
        * @param key The key to delete.
+       * @param value Optional specific value to delete.
        * @returns true if the key was found and deleted, false otherwise.
        */
-      delete: (key: K) => {
-          const delete_effect = Effect.gen(function* () {
-             const root_id = yield* Ref.get(rootIdRef);
-             const deleted = yield* deleteFromNode(root_id, key);
-             
-             // Root height reduction
-             const root = yield* readNode(root_id);
-             if (!root.is_leaf && root.keys.length === 0) {
-                 yield* updateRootId(root.children[0]);
-             }
-             
-             return deleted;
-          });
-          return semaphore.withPermits(1)(delete_effect);
+      delete: (key: K, value?: string) => {
+        const delete_effect = Effect.gen(function* () {
+          const root_id = yield* Ref.get(rootIdRef);
+          const deleted = yield* deleteFromNode(root_id, key, value);
+
+          // Root height reduction
+          const root = yield* readNode(root_id);
+          if (!root.is_leaf && root.keys.length === 0) {
+            yield* updateRootId(root.children[0]);
+          }
+
+          return deleted;
+        });
+        return semaphore.withPermits(1)(delete_effect);
       }
     };
   });
