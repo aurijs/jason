@@ -1,4 +1,4 @@
-import { FileSystem } from "@effect/platform";
+import { FileSystem, Path } from "@effect/platform";
 import { NodeContext } from "@effect/platform-node";
 import {
   Context,
@@ -132,12 +132,11 @@ export const createJasonDBLayer = <
   const T extends Record<string, SchemaOrString>
 >(
   config: JasonDBConfig<T>
-): Layer.Layer<JasonDB, Error, never> => {
+): Layer.Layer<JasonDB, Error, FileSystem.FileSystem | Path.Path> => {
   const ConfigLayer = ConfigManager.Default(config);
 
   const BaseInfraLayer = Layer.mergeAll(
     JsonFile.Default,
-    NodeContext.layer,
     Json.Default,
     WriteAheadLog.Default
   );
@@ -189,7 +188,9 @@ export const createJasonDB = async <
 >(
   config: JasonDBConfig<T>
 ): Promise<Database<InferCollections<T>>> => {
-  const layer = createJasonDBLayer(config);
+  const layer = createJasonDBLayer(config).pipe(
+    Layer.provide(NodeContext.layer)
+  );
   const scope = await Effect.runPromise(Scope.make());
   const context = await Effect.runPromise(
     Layer.build(layer).pipe(Scope.extend(scope))
