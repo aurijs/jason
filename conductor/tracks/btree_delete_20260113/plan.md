@@ -8,7 +8,7 @@
     - [x] Sub-task: Write failing test: Delete existing key from a leaf node (no rebalancing needed).
     - [x] Sub-task: Implement `delete` method shell and basic leaf deletion logic in `src/make/btree.ts`.
     - [x] Sub-task: Verify tests pass.
-- [x] Task: Conductor - User Manual Verification 'Phase 1: Test Infrastructure & Basic Scenarios' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Test Infrastructure & Basic Scenarios' (Protocol in workflow.md) 36861ac
 
 ## Phase 2: Complex Deletion & Rebalancing
 - [ ] Task: Implement Internal Node Deletion
