@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { BunContext } from "@effect/platform-bun";
+import { Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { ConfigManager } from "../src/layers/config.js";
 import * as path from'node:path'
@@ -12,7 +13,9 @@ describe("ConfigManager Service", () => {
     }
   };
 
-  const TestLayer = ConfigManager.Default(testConfig);
+  const TestLayer = ConfigManager.Default(testConfig).pipe(
+    Layer.provide(BunContext.layer)
+  );
 
   it("should return the correct base path", async () => {
     const program = Effect.gen(function* () {
