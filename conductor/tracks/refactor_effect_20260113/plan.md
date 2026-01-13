@@ -24,6 +24,6 @@
 - [x] Task: Conductor - User Manual Verification 'Collection and Query API' (Protocol in workflow.md) 751f245
 
 ## Phase 4: Final Integration and Cleanup
-- [ ] Task: Update Main Entry point (JasonDB class) to Effect-based API - [ ] Task: Write Tests for Entry Point - [ ] Task: Implement Refactor
+- [x] Task: Update Main Entry point (JasonDB class) to Effect-based API 2afa510 - [x] Task: Write Tests for Entry Point 2afa510 - [x] Task: Implement Refactor 2afa510
 - [ ] Task: Final project-wide lint and type check - [ ] Task: Run `bun run lint` and `bun x tsc --noEmit`
 - [ ] Task: Conductor - User Manual Verification 'Final Integration and Cleanup' (Protocol in workflow.md)
