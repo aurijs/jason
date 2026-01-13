@@ -1,11 +1,12 @@
 import { FileSystem } from "@effect/platform";
 import type { SystemError } from "@effect/platform/Error";
-import { Effect, Stream } from "effect";
+import { Cache, Effect, Stream } from "effect";
 import { ConfigManager } from "../layers/config.js";
 import { JsonFile } from "../layers/json-file.js";
 
 interface StorageManagerOptions {
   readonly file_filter?: (filename: string) => boolean;
+  readonly cacheCapacity?: number | undefined;
 }
 
 interface StorageManager<Doc> {
@@ -36,21 +37,41 @@ export const makeStorageManager = <Doc extends Record<string, any>>(
     const file_filter =
       options?.file_filter ?? ((file) => !file.startsWith("_"));
 
+    const cache = yield* Cache.make({
+      capacity: options?.cacheCapacity ?? 1000,
+      timeToLive: "24 hours",
+      lookup: (id: string) => {
+        // Effect.logDebug(`Cache lookup for ${id}`)
+        return jsonFile
+          .readJsonFile(`${collection_path}/${id}.json`, schema)
+          .pipe(
+            Effect.catchTag("SystemError", (e) =>
+              e.reason === "NotFound"
+                ? Effect.succeed(undefined)
+                : Effect.fail(e)
+            )
+          );
+      }
+    });
+
     const read = (id: string) =>
-      jsonFile
-        .readJsonFile(`${collection_path}/${id}.json`, schema)
-        .pipe(
-          Effect.catchTag("SystemError", (e) =>
-            e.reason === "NotFound" ? Effect.succeed(undefined) : Effect.fail(e)
-          )
-        );
+      cache.get(id).pipe(
+        // Effect.tap((res) => Effect.logDebug(`Cache get for ${id}: ${JSON.stringify(res)}`)),
+        Effect.map((res) => res as Doc | undefined)
+      );
 
     return {
       read,
       write: (id: string, doc: any) =>
-        jsonFile.writeJsonFile(`${collection_path}/${id}.json`, schema, doc),
+        jsonFile
+          .writeJsonFile(`${collection_path}/${id}.json`, schema, doc)
+          .pipe(Effect.zipLeft(cache.invalidate(id))),
 
-      remove: (id: string) => fs.remove(`${collection_path}/${id}.json`),
+      remove: (id: string) =>
+        fs
+          .remove(`${collection_path}/${id}.json`)
+          .pipe(Effect.zipLeft(cache.invalidate(id))),
+
       exists: (id: string) => fs.exists(`${collection_path}/${id}.json`),
 
       readAll: Stream.fromEffect(fs.readDirectory(collection_path)).pipe(

@@ -20,11 +20,14 @@ export const makeCollection = <Doc extends Record<string, any>>(
 
     // load path, schema and index
     const collection_path = yield* config.getCollectionPath(collection_name);
+    const cache_config = yield* config.getCacheConfig;
 
     // make index if it's non existent
     yield* fs.makeDirectory(collection_path, { recursive: true });
 
-    const storage = yield* makeStorageManager<Doc>(collection_name);
+    const storage = yield* makeStorageManager<Doc>(collection_name, {
+      cacheCapacity: cache_config?.document_capacity
+    });
     const indexService = yield* makeIndexService(collection_name);
     const metadataService = yield* makeMetadata(collection_name);
     const queryManager = yield* makeQuery<Doc>(

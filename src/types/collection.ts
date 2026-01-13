@@ -333,4 +333,20 @@ export interface JasonDBConfig<T extends Record<string, SchemaOrString>> {
    * All defined schemas are validated at runtime using `Effect.Schema`.
    */
   collections: T;
+
+  /**
+   * Optional configuration for caching.
+   */
+  cache?: {
+    /**
+     * Maximum number of documents to cache per collection.
+     * @default 1000
+     */
+    document_capacity?: number;
+    /**
+     * Maximum number of B-Tree nodes to cache per index.
+     * @default 1000
+     */
+    index_capacity?: number;
+  };
 }

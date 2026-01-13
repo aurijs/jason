@@ -91,7 +91,12 @@ export class ConfigManager extends Effect.Service<ConfigManager>()(
           getMetadataPath: (collection_name: string) =>
             Effect.succeed(
               path.join(config.base_path, collection_name, "_metadata.json")
-            )
+            ),
+
+          /**
+           * @return The cache configuration
+           */
+          getCacheConfig: Effect.succeed(config.cache)
         };
       })
   }

@@ -11,6 +11,7 @@ export const makeIndexService = <Doc extends { id?: string }>(
     const collection_path = yield* config.getCollectionPath(index_name);
     const doc_schema = yield* config.getCollectionSchema(index_name);
     const index_definitions = yield* config.getIndexDefinitions(index_name);
+    const cache_config = yield* config.getCacheConfig;
 
     // For each field that needs being indexed, create a
     // B-tree service instance
@@ -32,7 +33,8 @@ export const makeIndexService = <Doc extends { id?: string }>(
             const btree_service_effect = makeBtreeService(
               `${collection_path}/${field_name}`,
               key_schema,
-              8 // B-tree order
+              8, // B-tree order
+              cache_config?.index_capacity
             );
             return [field_name, btree_service_effect];
           })

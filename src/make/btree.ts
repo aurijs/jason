@@ -1,6 +1,6 @@
 import { FileSystem } from "@effect/platform";
 import type { SystemError } from "@effect/platform/Error";
-import { Effect, Ref } from "effect";
+import { Cache, Effect, Ref } from "effect";
 import * as Schema from "effect/Schema";
 import { Json } from "../layers/json.js";
 import { DatabaseError } from "../core/errors.js";
@@ -28,7 +28,8 @@ export type RootPointer = Schema.Schema.Type<typeof RootPointerSchema>;
 export const makeBtreeService = <K>(
   three_path: string,
   key_schema: Schema.Schema<any, K>,
-  order: number
+  order: number,
+  cacheCapacity: number = 1000
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -39,6 +40,41 @@ export const makeBtreeService = <K>(
     const semaphore = yield* Effect.makeSemaphore(1);
 
     yield* fs.makeDirectory(three_path, { recursive: true });
+
+    const cache = yield* Cache.make({
+      capacity: cacheCapacity,
+      timeToLive: "24 hours",
+      lookup: (id: string) =>
+        fs.readFileString(`${three_path}/${id}.json`).pipe(
+          Effect.flatMap(jsonService.parse),
+          Effect.flatMap((data) => Schema.decode(node_schema)(data)),
+          Effect.mapError(
+            (e) =>
+              new DatabaseError({
+                message: `Failed to read node ${id}`,
+                cause: e
+              })
+          )
+        )
+    });
+
+    const readNode = (id: string) => cache.get(id);
+
+    const writeNode = (node: BTreeNode<K>) =>
+      Schema.encode(node_schema)(node).pipe(
+        Effect.flatMap(jsonService.stringify),
+        Effect.flatMap((content) =>
+          fs.writeFileString(`${three_path}/${node.id}.json`, content)
+        ),
+        Effect.zipLeft(cache.invalidate(node.id)),
+        Effect.mapError(
+          (e) =>
+            new DatabaseError({
+              message: `Failed to write node ${node.id}`,
+              cause: e
+            })
+        )
+      );
 
     const createNode = (is_leaf: boolean) =>
       Effect.sync(
@@ -51,34 +87,6 @@ export const makeBtreeService = <K>(
             children: []
           }) as BTreeNode<K>
       ).pipe(Effect.tap(writeNode));
-
-    const readNode = (id: string) =>
-      fs.readFileString(`${three_path}/${id}.json`).pipe(
-        Effect.flatMap(jsonService.parse),
-        Effect.flatMap((data) => Schema.decode(node_schema)(data)),
-        Effect.mapError(
-          (e) =>
-            new DatabaseError({
-              message: `Failed to read node ${id}`,
-              cause: e
-            })
-        )
-      );
-
-    const writeNode = (node: BTreeNode<K>) =>
-      Schema.encode(node_schema)(node).pipe(
-        Effect.flatMap(jsonService.stringify),
-        Effect.flatMap((content) =>
-          fs.writeFileString(`${three_path}/${node.id}.json`, content)
-        ),
-        Effect.mapError(
-          (e) =>
-            new DatabaseError({
-              message: `Failed to write node ${node.id}`,
-              cause: e
-            })
-        )
-      );
 
     const rootIdRef = yield* Effect.gen(function* () {
       const content = yield* fs.readFileString(root_pointer_path);
