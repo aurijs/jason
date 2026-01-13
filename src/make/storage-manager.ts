@@ -29,7 +29,7 @@ export const makeStorageManager = <Doc extends Record<string, any>>(
     const collection_path = yield* config.getCollectionPath(collection_name);
 
     const file_filter =
-      options?.file_filter ?? ((file) => !file.startsWith("-"));
+      options?.file_filter ?? ((file) => !file.startsWith("_"));
 
     const read = (id: string) =>
       jsonFile
