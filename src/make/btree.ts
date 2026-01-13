@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import { Json } from "../layers/json.js";
 import { DatabaseError } from "../core/errors.js";
 
-const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
+export const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
   Schema.mutable(Schema.Struct({
     id: Schema.String,
     is_leaf: Schema.Boolean,
@@ -14,10 +14,10 @@ const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
     children: Schema.mutable(Schema.Array(Schema.String))
   }));
 
-type BTreeNode<K> = Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>;
+export type BTreeNode<K> = Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>;
 
-const RootPointerSchema = Schema.mutable(Schema.Struct({ root_id: Schema.String }));
-type RootPointer = Schema.Schema.Type<typeof RootPointerSchema>;
+export const RootPointerSchema = Schema.mutable(Schema.Struct({ root_id: Schema.String }));
+export type RootPointer = Schema.Schema.Type<typeof RootPointerSchema>;
 
 export const makeBtreeService = <K>(
   three_path: string,
