@@ -1,7 +1,9 @@
 # Plan: Effect.ts Integration Refactor
 
 ## Phase 1: Foundation and Infrastructure
-- [ ] Task: Define Core Error Schema using Effect.ts Schema - [ ] Task: Write Tests for Error Schema - [ ] Task: Implement Error Schema
+- [x] Task: Define Core Error Schema using Effect.ts Schema b0e8d05
+- [x] Task: Write Tests for Error Schema b0e8d05
+- [x] Task: Implement Error Schema b0e8d05
 - [ ] Task: Define FileSystem and Config Layers - [ ] Task: Write Tests for Layers - [ ] Task: Implement Layers
 - [ ] Task: Conductor - User Manual Verification 'Foundation and Infrastructure' (Protocol in workflow.md)
 
