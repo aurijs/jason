@@ -14,5 +14,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [ ] Track: Implement Standard Schema definition support for collection validation.
+
+
+## [x] Track: Implement Standard Schema definition support for collection validation.
+
 *Link: [./conductor/tracks/standard_schema_support_20260113/](./conductor/tracks/standard_schema_support_20260113/)*
