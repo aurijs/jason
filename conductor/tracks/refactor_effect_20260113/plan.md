@@ -4,7 +4,9 @@
 - [x] Task: Define Core Error Schema using Effect.ts Schema b0e8d05
 - [x] Task: Write Tests for Error Schema b0e8d05
 - [x] Task: Implement Error Schema b0e8d05
-- [ ] Task: Define FileSystem and Config Layers - [ ] Task: Write Tests for Layers - [ ] Task: Implement Layers
+- [x] Task: Define FileSystem and Config Layers b0e8d05
+- [x] Task: Write Tests for Layers b0e8d05
+- [x] Task: Implement Layers b0e8d05
 - [ ] Task: Conductor - User Manual Verification 'Foundation and Infrastructure' (Protocol in workflow.md)
 
 ## Phase 2: Core Logic Refactoring
