@@ -1,18 +1,19 @@
 import { FileSystem } from "@effect/platform";
+import type { SystemError } from "@effect/platform/Error";
 import { Effect, Stream } from "effect";
-import { JsonFile } from "../layers/json-file.js";
 import { ConfigManager } from "../layers/config.js";
+import { JsonFile } from "../layers/json-file.js";
 
 interface StorageManagerOptions {
   readonly file_filter?: (filename: string) => boolean;
 }
 
 interface StorageManager<Doc> {
-  readonly read: (id: string) => Effect.Effect<Doc | undefined, Error>;
-  readonly write: (id: string, doc: any) => Effect.Effect<void, Error>;
-  readonly remove: (id: string) => Effect.Effect<void, Error>;
-  readonly exists: (id: string) => Effect.Effect<boolean, Error>;
-  readonly readAll: Stream.Stream<Doc, Error>;
+  readonly read: (id: string) => Effect.Effect<Doc | undefined, Error | SystemError>;
+  readonly write: (id: string, doc: any) => Effect.Effect<void, Error | SystemError>;
+  readonly remove: (id: string) => Effect.Effect<void, Error | SystemError>;
+  readonly exists: (id: string) => Effect.Effect<boolean, Error | SystemError>;
+  readonly readAll: Stream.Stream<Doc, Error | SystemError>;
 }
 
 export const makeStorageManager = <Doc extends Record<string, any>>(

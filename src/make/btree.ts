@@ -1,24 +1,22 @@
 import { FileSystem } from "@effect/platform";
+import type { SystemError } from "@effect/platform/Error";
 import { Effect, Ref } from "effect";
 import * as Schema from "effect/Schema";
-import type { DeepMutable } from "effect/Types";
 import { Json } from "../layers/json.js";
 
 const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
-  Schema.Struct({
+  Schema.mutable(Schema.Struct({
     id: Schema.String,
     is_leaf: Schema.Boolean,
-    keys: Schema.Array(key_schema),
-    values: Schema.Array(Schema.String),
-    children: Schema.Array(Schema.String)
-  });
+    keys: Schema.mutable(Schema.Array(key_schema)),
+    values: Schema.mutable(Schema.Array(Schema.String)),
+    children: Schema.mutable(Schema.Array(Schema.String))
+  }));
 
-type BTreeNode<K> = DeepMutable<
-  Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>
->;
+type BTreeNode<K> = Schema.Schema.Type<ReturnType<typeof BTreeNodeSchema<K>>>;
 
-const RootPointerSchema = Schema.Struct({ root_id: Schema.String });
-type RootPointer = DeepMutable<typeof RootPointerSchema.Type>;
+const RootPointerSchema = Schema.mutable(Schema.Struct({ root_id: Schema.String }));
+type RootPointer = Schema.Schema.Type<typeof RootPointerSchema>;
 
 export const makeBtreeService = <K>(
   three_path: string,
@@ -129,7 +127,7 @@ export const makeBtreeService = <K>(
       node: BTreeNode<K>,
       key: K,
       value: string
-    ): Effect.Effect<void, Error> =>
+    ): Effect.Effect<void, Error | SystemError> =>
       Effect.gen(function* () {
         let i = node.keys.length - 1;
         if (node.is_leaf) {
@@ -164,7 +162,7 @@ export const makeBtreeService = <K>(
     const findInNode = (
       node_id: string,
       key: K
-    ): Effect.Effect<string | undefined, Error> =>
+    ): Effect.Effect<string | undefined, Error | SystemError> =>
       Effect.gen(function* () {
         const node = yield* readNode(node_id);
         let i = 0;
@@ -202,9 +200,9 @@ export const makeBtreeService = <K>(
 
             yield* splitChild(new_root, 0, root);
             yield* updateRootId(new_root.id);
-            yield* insertNonFull(new_root, key, value as string);
+            yield* insertNonFull(new_root, key, value ?? "");
           } else {
-            yield* insertNonFull(root, key, value);
+            yield* insertNonFull(root, key, value ?? "");
           }
         });
 

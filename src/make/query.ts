@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { ConfigManager } from "../layers/config.js";
 import { makeIndexService } from "../layers/index.js";
 import type { Filter, QueryOptions } from "../types/collection.js";
@@ -53,10 +53,10 @@ export const makeQuery = <Doc extends Record<string, any>>(
                 (doc): doc is Doc => doc !== undefined
               );
             } else {
-              initial_docs = yield* storage.readAll;
+              initial_docs = Array.from(yield* Stream.runCollect(storage.readAll));
             }
           } else {
-            initial_docs = yield* storage.readAll;
+            initial_docs = Array.from(yield* Stream.runCollect(storage.readAll));
           }
 
           let final_results = initial_docs;
