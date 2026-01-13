@@ -9,8 +9,13 @@ interface StorageManagerOptions {
 }
 
 interface StorageManager<Doc> {
-  readonly read: (id: string) => Effect.Effect<Doc | undefined, Error | SystemError>;
-  readonly write: (id: string, doc: any) => Effect.Effect<void, Error | SystemError>;
+  readonly read: (
+    id: string
+  ) => Effect.Effect<Doc | undefined, Error | SystemError>;
+  readonly write: (
+    id: string,
+    doc: any
+  ) => Effect.Effect<void, Error | SystemError>;
   readonly remove: (id: string) => Effect.Effect<void, Error | SystemError>;
   readonly exists: (id: string) => Effect.Effect<boolean, Error | SystemError>;
   readonly readAll: Stream.Stream<Doc, Error | SystemError>;

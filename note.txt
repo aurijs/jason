@@ -1,0 +1,4 @@
+Task: Implement Basic Leaf Deletion
+Summary: Implemented `delete` method in BTree service and `deleteFromNode` helper. Handles deletion of keys from leaf nodes. Returns false if key not found. Returns true if key deleted. Internal node deletion currently traps with "Not implemented".
+Files: src/make/btree.ts, test/btree.test.ts
+Why: First step of deletion logic.

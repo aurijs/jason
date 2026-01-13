@@ -1,7 +1,4 @@
-import type {
-  Collection,
-  CollectionEffect
-} from "./collection.js";
+import type { Collection, CollectionEffect } from "./collection.js";
 
 export interface DatabaseEffect<Collections extends Record<string, any>> {
   readonly collections: {

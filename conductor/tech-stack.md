@@ -12,8 +12,8 @@ This document outlines the primary technologies, frameworks, and tools used in t
 ## Development Tools
 - **Build Tool:** [Tsup](https://tsup.egoist.dev/) - Fast TypeScript bundler.
 - **Testing:** [Vitest](https://vitest.dev/) - Next-generation testing framework.
-- **Linting & Formatting:** [Biome](https://biomejs.dev/) - One toolchain for web projects (replaces Prettier/ESLint).
+- **Linting & Formatting:** [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) - High-performance JavaScript linter.
 
 ## Key Patterns
 - **Functional Programming:** Leveraging Effect for pure, composable logic.
-- **Native Bun APIs:** Using Bun-specific APIs for file system and performance-critical operations.
+- **Platform Agnostic I/O:** Using `@effect/platform` to support multiple runtimes (Bun, Node.js) through a unified FileSystem abstraction.

@@ -27,21 +27,184 @@ export const makeCollection = <Doc extends Record<string, any>>(
     const storage = yield* makeStorageManager<Doc>(collection_name);
     const indexService = yield* makeIndexService(collection_name);
     const metadataService = yield* makeMetadata(collection_name);
-    const queryManager = yield* makeQuery<Doc>(collection_name, indexService, storage);
+    const queryManager = yield* makeQuery<Doc>(
+      collection_name,
+      indexService,
+      storage
+    );
 
     return {
       batch: {
-        insert: (_docs: Doc[]) =>
-          Effect.fail(
-            new DatabaseError({ message: "batch.insert not implemented" })
+        insert: (docs: Doc[]) =>
+          Effect.gen(function* () {
+            const results: BatchResult = { success: 0, failures: [] };
+            const ops: any[] = [];
+            const tasks: Effect.Effect<void, never>[] = [];
+
+            for (let i = 0; i < docs.length; i++) {
+              const data = docs[i];
+              const id = (data.id as string) ?? crypto.randomUUID();
+              const new_document = { ...data, id } as Doc;
+
+              ops.push({
+                _tag: "CreateOp",
+                collection: collection_name,
+                data: new_document
+              });
+
+              const post_write = Effect.all(
+                [
+                  storage.write(id, new_document),
+                  metadataService.incrementCount,
+                  indexService.update(undefined, new_document)
+                ],
+                { discard: true, concurrency: "unbounded" }
+              ).pipe(
+                Effect.match({
+                  onSuccess: () => {
+                    results.success++;
+                  },
+                  onFailure: (error) => {
+                    results.failures.push({
+                      index: i,
+                      error: error.toString()
+                    });
+                  }
+                })
+              );
+              tasks.push(post_write);
+            }
+
+            yield* wal.log({
+              _tag: "BatchOp",
+              collection: collection_name,
+              operations: ops
+            } as any);
+
+            yield* Effect.all(tasks, { concurrency: "unbounded" });
+
+            return results;
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new DatabaseError({ message: "Failed to insert batch", cause })
+            )
           ),
-        delete: (_filter: Filter<Doc>) =>
-          Effect.fail(
-            new DatabaseError({ message: "batch.delete not implemented" })
+        delete: (filter: Filter<Doc>) =>
+          Effect.gen(function* () {
+            const docs_to_delete = yield* queryManager.find({ where: filter });
+            const results: BatchResult = { success: 0, failures: [] };
+            const ops: any[] = [];
+            const tasks: Effect.Effect<void, never>[] = [];
+
+            for (let i = 0; i < docs_to_delete.length; i++) {
+              const doc = docs_to_delete[i];
+              const id = doc.id;
+
+              ops.push({
+                _tag: "DeleteOp",
+                collection: collection_name,
+                id
+              });
+
+              const post_write = Effect.all(
+                [
+                  storage.remove(id),
+                  metadataService.decrementCount,
+                  indexService.update(doc, undefined)
+                ],
+                { discard: true, concurrency: "unbounded" }
+              ).pipe(
+                Effect.match({
+                  onSuccess: () => {
+                    results.success++;
+                  },
+                  onFailure: (error) => {
+                    results.failures.push({
+                      id,
+                      error: error.toString()
+                    });
+                  }
+                })
+              );
+              tasks.push(post_write);
+            }
+
+            if (ops.length > 0) {
+              yield* wal.log({
+                _tag: "BatchOp",
+                collection: collection_name,
+                operations: ops
+              } as any);
+
+              yield* Effect.all(tasks, { concurrency: "unbounded" });
+            }
+
+            return results;
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new DatabaseError({ message: "Failed to delete batch", cause })
+            )
           ),
-        update: (_filter: Filter<Doc>, _data: Partial<Omit<Doc, "id">>) =>
-          Effect.fail(
-            new DatabaseError({ message: "batch.update not implemented" })
+        update: (filter: Filter<Doc>, data: Partial<Omit<Doc, "id">>) =>
+          Effect.gen(function* () {
+            const docs_to_update = yield* queryManager.find({ where: filter });
+            const results: BatchResult = { success: 0, failures: [] };
+            const ops: any[] = [];
+            const tasks: Effect.Effect<void, never>[] = [];
+
+            for (let i = 0; i < docs_to_update.length; i++) {
+              const old_document = docs_to_update[i];
+              const id = old_document.id;
+              const new_document = { ...old_document, ...data } as Doc;
+
+              ops.push({
+                _tag: "UpdateOp",
+                collection: collection_name,
+                id,
+                data
+              });
+
+              const post_write = Effect.all(
+                [
+                  storage.write(id, new_document),
+                  metadataService.touch,
+                  indexService.update(old_document, new_document)
+                ],
+                { discard: true, concurrency: "unbounded" }
+              ).pipe(
+                Effect.match({
+                  onSuccess: () => {
+                    results.success++;
+                  },
+                  onFailure: (error) => {
+                    results.failures.push({
+                      id,
+                      error: error.toString()
+                    });
+                  }
+                })
+              );
+              tasks.push(post_write);
+            }
+
+            if (ops.length > 0) {
+              yield* wal.log({
+                _tag: "BatchOp",
+                collection: collection_name,
+                operations: ops
+              } as any);
+
+              yield* Effect.all(tasks, { concurrency: "unbounded" });
+            }
+
+            return results;
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new DatabaseError({ message: "Failed to update batch", cause })
+            )
           )
       },
 

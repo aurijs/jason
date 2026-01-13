@@ -1,0 +1,8 @@
+{
+  "track_id": "bulk_operations_api_20260113",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-13T12:00:00Z",
+  "updated_at": "2026-01-13T12:00:00Z",
+  "description": "Implement Bulk Operations API (batch.insert, batch.delete, batch.update) with WAL optimization."
+}

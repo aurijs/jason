@@ -20,7 +20,6 @@ import { makeCollection } from "../make/collection.js";
 import { makeStorageManager } from "../make/storage-manager.js";
 import type {
   Collection,
-  CollectionEffect,
   InferCollections,
   JasonDBConfig
 } from "../types/collection.js";
@@ -57,10 +56,21 @@ const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
     const last_segment = yield* Ref.make(0);
 
     const replay_effect = wal.replay.pipe(
+      Stream.flatMap(({ op, segment, position }) =>
+        op._tag === "BatchOp"
+          ? Stream.fromIterable(
+              op.operations.map((innerOp) => ({
+                op: innerOp,
+                segment,
+                position
+              }))
+            )
+          : Stream.make({ op, segment, position })
+      ),
       Stream.tap(({ segment }) => Ref.set(last_segment, Math.max(segment, 0))),
       Stream.groupByKey(
         ({ op }) =>
-          `${op.collection}/${op._tag === "CreateOp" ? op.data.id : op.id}`,
+          `${op.collection}/${op._tag === "CreateOp" ? op.data.id : (op as any).id}`,
         { bufferSize: 8192 }
       ),
       (grouped_stream) =>

@@ -6,6 +6,10 @@ import type { Mutable } from "effect/Types";
  */
 export const IndexDefinitionSchema = Schema.Struct({
   /**
+   * Indicates if the field is indexed.
+   */
+  indexed: Schema.optional(Schema.Boolean),
+  /**
    * The field(s) that the index is built on.
    * This can be a single field or a compound path (array of fields).
    *

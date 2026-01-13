@@ -19,6 +19,7 @@ interface ParsedFields {
   is_primary_key_auto_inc: boolean;
   is_primary_key_uuid: boolean;
   is_unique: boolean;
+  is_indexed: boolean;
   compound_path: string[] | undefined;
 }
 
@@ -49,11 +50,13 @@ export function parseSchemaString(schema_string: string) {
       field_definition.startsWith("&") ||
       is_primary_key_auto_inc ||
       is_primary_key_uuid;
+    const is_indexed =
+      field_definition.startsWith("^") || is_unique || is_multi_entry;
 
     const is_compound =
       field_definition.startsWith("[") && field_definition.endsWith("]");
 
-    let clean_field_name = field_definition.replace(/^[++@&*]/, "");
+    let clean_field_name = field_definition.replace(/^[++@&*^]/, "");
 
     let compound_path: string[] | undefined = undefined;
 
@@ -69,6 +72,7 @@ export function parseSchemaString(schema_string: string) {
       is_primary_key_auto_inc,
       is_primary_key_uuid,
       is_unique,
+      is_indexed,
       compound_path
     });
   }
@@ -81,6 +85,7 @@ export function buildIndexDefinitions(parsed_fields: ParsedFields[]) {
 
   for (const field of parsed_fields) {
     definitions[field.field_name] = {
+      indexed: field.is_indexed,
       unique: field.is_unique,
       multi_entry: field.is_multi_entry,
       compound_path: field.compound_path,
@@ -109,7 +114,6 @@ export function buildSchema(parsed_fields: ParsedFields[]) {
 
   return Schema.Struct(fields);
 }
-
 
 export function generateSchemaFromDefinitions(
   definitions: Record<string, IndexDefinition>
@@ -162,6 +166,7 @@ export function extractIndexDefinitions(index_string: string) {
   for (const part of parts) {
     let field_name = part;
     const definition: IndexDefinition = {
+      indexed: true,
       unique: false,
       multi_entry: false
     };
@@ -201,9 +206,11 @@ export function extractIndexDefinitions(index_string: string) {
     } else if (part.startsWith("*")) {
       field_name = part.substring(1);
       definition.multi_entry = true;
+    } else if (part.startsWith("^")) {
+      field_name = part.substring(1);
     }
 
-    if (/[&*[\]+@]/g.test(field_name)) {
+    if (/[&*[\]+@^]/g.test(field_name)) {
       throw new Error(`Invalid characters in index definition: ${part}`);
     }
 

@@ -474,4 +474,90 @@ describe("BTree Service", () => {
         expect(deleteResults[key].foundAfter).toBeUndefined();
     }
   }, 30000);
+
+  describe("Range Queries", () => {
+    it("should find keys in range", async () => {
+        const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+        const program = Effect.scoped(
+            Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                const tempDir = yield* fs.makeTempDirectoryScoped();
+                const btree = yield* makeBtreeService(tempDir, Schema.String, 3);
+                
+                const keys = ["10", "20", "30", "40", "50"];
+                for (const k of keys) yield* btree.insert(k, `val-${k}`);
+                
+                // @ts-ignore
+                const results = yield* btree.findRange({ min: "20", max: "40" });
+                return results;
+            })
+        ).pipe(Effect.provide(TestLayer));
+
+        const results = await Effect.runPromise(program);
+        expect(results.map(r => r.key)).toEqual(["20", "30", "40"]);
+    });
+
+    it("should respect exclusive bounds", async () => {
+        const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+        const program = Effect.scoped(
+            Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                const tempDir = yield* fs.makeTempDirectoryScoped();
+                const btree = yield* makeBtreeService(tempDir, Schema.String, 3);
+                
+                const keys = ["10", "20", "30", "40", "50"];
+                for (const k of keys) yield* btree.insert(k, `val-${k}`);
+                
+                // @ts-ignore
+                const results = yield* btree.findRange({ min: "20", max: "40", minInclusive: false, maxInclusive: false });
+                return results;
+            })
+        ).pipe(Effect.provide(TestLayer));
+
+        const results = await Effect.runPromise(program);
+        expect(results.map(r => r.key)).toEqual(["30"]);
+    });
+
+    it("should work without lower bound (lt/lte)", async () => {
+        const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+        const program = Effect.scoped(
+            Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                const tempDir = yield* fs.makeTempDirectoryScoped();
+                const btree = yield* makeBtreeService(tempDir, Schema.String, 3);
+                
+                const keys = ["10", "20", "30", "40", "50"];
+                for (const k of keys) yield* btree.insert(k, `val-${k}`);
+                
+                // @ts-ignore
+                const results = yield* btree.findRange({ max: "20" });
+                return results;
+            })
+        ).pipe(Effect.provide(TestLayer));
+
+        const results = await Effect.runPromise(program);
+        expect(results.map(r => r.key)).toEqual(["10", "20"]);
+    });
+
+    it("should work without upper bound (gt/gte)", async () => {
+        const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+        const program = Effect.scoped(
+            Effect.gen(function* () {
+                const fs = yield* FileSystem.FileSystem;
+                const tempDir = yield* fs.makeTempDirectoryScoped();
+                const btree = yield* makeBtreeService(tempDir, Schema.String, 3);
+                
+                const keys = ["10", "20", "30", "40", "50"];
+                for (const k of keys) yield* btree.insert(k, `val-${k}`);
+                
+                // @ts-ignore
+                const results = yield* btree.findRange({ min: "40" });
+                return results;
+            })
+        ).pipe(Effect.provide(TestLayer));
+
+        const results = await Effect.runPromise(program);
+        expect(results.map(r => r.key)).toEqual(["40", "50"]);
+    });
+  });
 });

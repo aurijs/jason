@@ -16,21 +16,26 @@ export const makeIndexService = <Doc extends { id?: string }>(
     // B-tree service instance
     const btree_services = yield* Effect.all(
       Object.fromEntries(
-        Object.entries(index_definitions).map(([field_name]) => {
-          const key_schema = doc_schema.fields[field_name];
-          if (!key_schema) {
-            throw new Error(
-              `Field ${field_name} does not exist in document schema`
-            );
-          }
+        Object.entries(index_definitions)
+          .filter(
+            ([_, def]) =>
+              def.indexed || def.unique || def.primary_key || def.multi_entry
+          )
+          .map(([field_name]) => {
+            const key_schema = doc_schema.fields[field_name];
+            if (!key_schema) {
+              throw new Error(
+                `Field ${field_name} does not exist in document schema`
+              );
+            }
 
-          const btree_service_effect = makeBtreeService(
-            `${collection_path}/${field_name}`,
-            key_schema,
-            8 // B-tree order
-          );
-          return [field_name, btree_service_effect];
-        })
+            const btree_service_effect = makeBtreeService(
+              `${collection_path}/${field_name}`,
+              key_schema,
+              8 // B-tree order
+            );
+            return [field_name, btree_service_effect];
+          })
       )
     );
 
@@ -42,7 +47,7 @@ export const makeIndexService = <Doc extends { id?: string }>(
      */
     const update = (old_doc: Doc | undefined, new_doc: Doc | undefined) =>
       Effect.forEach(
-        Object.keys(index_definitions),
+        Object.keys(btree_services),
         (field_name) =>
           Effect.gen(function* () {
             const btree = btree_services[field_name];
@@ -69,12 +74,12 @@ export const makeIndexService = <Doc extends { id?: string }>(
       );
 
     /**
-     * Finds the IDs of documents that match a given field value.
+     * Finds all IDs of documents that match a given field value.
      * @param field_name The name of the field to search.
      * @param value The value to search for.
      * @returns An effect that returns the IDs of matching documents.
      */
-    const findIds = (field_name: string, value: unknown) =>
+    const findAllIds = (field_name: string, value: unknown) =>
       Effect.gen(function* () {
         const btree = btree_services[field_name];
         if (!btree) {
@@ -83,12 +88,34 @@ export const makeIndexService = <Doc extends { id?: string }>(
           );
         }
 
-        // Delegate to B-tree service to find the document IDs
-        const found_id = yield* btree.find(value as any);
-
-        // Return an array of IDs (or empty array if not found)
-        return found_id ? [found_id] : [];
+        return yield* btree.findAll(value as any);
       });
 
-    return { update, findIds };
+    /**
+     * Finds all key-value pairs within a specified range on an indexed field.
+     * @param field_name The name of the field to search.
+     * @param options Range options.
+     * @returns An effect that returns the key-value pairs within the range.
+     */
+    const findRange = (
+      field_name: string,
+      options: {
+        min?: any;
+        max?: any;
+        minInclusive?: boolean;
+        maxInclusive?: boolean;
+      }
+    ) =>
+      Effect.gen(function* () {
+        const btree = btree_services[field_name];
+        if (!btree) {
+          return yield* Effect.fail(
+            new Error(`Index on field ${field_name} does not exist`)
+          );
+        }
+
+        return yield* btree.findRange(options);
+      });
+
+    return { update, findAllIds, findRange };
   });

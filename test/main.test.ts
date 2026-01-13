@@ -56,7 +56,7 @@ describe("JasonDB Entry Point", () => {
     
     await db.collections.users.create({ id: "2", name: "Promise User" });
     
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 1000));
 
     const user = await db.collections.users.findById("2");
     

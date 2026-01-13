@@ -28,9 +28,19 @@ export const DeleteOpSchema = Schema.Struct({
 });
 export type DeleteOp = typeof DeleteOpSchema.Type;
 
+export const BatchOpSchema = Schema.Struct({
+  _tag: Schema.Literal("BatchOp"),
+  collection: Schema.String,
+  operations: Schema.Array(
+    Schema.Union(CreateOpSchema, UpdateOpSchema, DeleteOpSchema)
+  )
+});
+export type BatchOp = typeof BatchOpSchema.Type;
+
 export const WALOperationSchema = Schema.Union(
   CreateOpSchema,
   UpdateOpSchema,
-  DeleteOpSchema
+  DeleteOpSchema,
+  BatchOpSchema
 );
 export type WALOperation = typeof WALOperationSchema.Type;

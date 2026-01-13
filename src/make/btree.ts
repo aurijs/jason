@@ -236,6 +236,86 @@ export const makeBtreeService = <K>(
         return results;
       });
 
+    const findRangeInNode = (
+      node_id: string,
+      options: {
+        min?: K;
+        max?: K;
+        minInclusive?: boolean;
+        maxInclusive?: boolean;
+      }
+    ): Effect.Effect<
+      { key: K; value: string }[],
+      DatabaseError | SystemError
+    > =>
+      Effect.gen(function* () {
+        const node = yield* readNode(node_id);
+        const results: { key: K; value: string }[] = [];
+        const { min, max, minInclusive = true, maxInclusive = true } = options;
+
+        let i = 0;
+
+        // Skip keys strictly smaller than min
+        if (min != null) {
+          while (i < node.keys.length && node.keys[i] < min) {
+            i++;
+          }
+        }
+
+        while (i < node.keys.length) {
+          const currentKey = node.keys[i];
+
+          // Check if we passed the max bound
+          if (max != null) {
+            if (maxInclusive ? currentKey > max : currentKey >= max) {
+              // No more keys in this node can match.
+              // But we might need to check child[i] if its keys could be within range.
+              if (!node.is_leaf) {
+                const childResults = yield* findRangeInNode(
+                  node.children[i],
+                  options
+                );
+                results.push(...childResults);
+              }
+              return results;
+            }
+          }
+
+          // At this point, currentKey could be within range.
+          // Before adding currentKey, check child[i]
+          if (!node.is_leaf) {
+            const childResults = yield* findRangeInNode(
+              node.children[i],
+              options
+            );
+            results.push(...childResults);
+          }
+
+          // Add currentKey if it satisfies min bound (max bound already checked)
+          let inMin = true;
+          if (min != null) {
+            inMin = minInclusive ? currentKey >= min : currentKey > min;
+          }
+
+          if (inMin) {
+            results.push({ key: currentKey, value: node.values[i] });
+          }
+
+          i++;
+        }
+
+        // Check the last child
+        if (!node.is_leaf) {
+          const childResults = yield* findRangeInNode(
+            node.children[i],
+            options
+          );
+          results.push(...childResults);
+        }
+
+        return results;
+      });
+
     const getPredecessor = (
       node: BTreeNode<K>,
       i: number
@@ -517,6 +597,23 @@ export const makeBtreeService = <K>(
         );
 
         return semaphore.withPermits(1)(find_all_effect);
+      },
+      /**
+       * Finds all key-value pairs within a specified range in the B-tree.
+       * @param options Range options.
+       * @returns - An array of key-value pairs within the range.
+       */
+      findRange: (options: {
+        min?: K;
+        max?: K;
+        minInclusive?: boolean;
+        maxInclusive?: boolean;
+      }) => {
+        const find_range_effect = Ref.get(rootIdRef).pipe(
+          Effect.flatMap((rootId) => findRangeInNode(rootId, options))
+        );
+
+        return semaphore.withPermits(1)(find_range_effect);
       },
       /**
        * Deletes a key from the B-tree.
