@@ -2,13 +2,13 @@
 
 ## Phase 1: Test Infrastructure & Basic Scenarios
 - [x] Task: Create Tree Validation Helper f98c052
-    - [ ] Sub-task: Implement a `validateTree` function in `test/btree.test.ts` to verify B-Tree properties (sorted keys, correct child counts, depth consistency).
-- [ ] Task: Implement Basic Leaf Deletion
-    - [ ] Sub-task: Write failing test: Delete non-existent key returns `false`.
-    - [ ] Sub-task: Write failing test: Delete existing key from a leaf node (no rebalancing needed).
-    - [ ] Sub-task: Implement `delete` method shell and basic leaf deletion logic in `src/make/btree.ts`.
-    - [ ] Sub-task: Verify tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Test Infrastructure & Basic Scenarios' (Protocol in workflow.md)
+    - [x] Sub-task: Implement a `validateTree` function in `test/btree.test.ts` to verify B-Tree properties (sorted keys, correct child counts, depth consistency).
+- [x] Task: Implement Basic Leaf Deletion 487b6f2
+    - [x] Sub-task: Write failing test: Delete non-existent key returns `false`.
+    - [x] Sub-task: Write failing test: Delete existing key from a leaf node (no rebalancing needed).
+    - [x] Sub-task: Implement `delete` method shell and basic leaf deletion logic in `src/make/btree.ts`.
+    - [x] Sub-task: Verify tests pass.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Test Infrastructure & Basic Scenarios' (Protocol in workflow.md)
 
 ## Phase 2: Complex Deletion & Rebalancing
 - [ ] Task: Implement Internal Node Deletion
