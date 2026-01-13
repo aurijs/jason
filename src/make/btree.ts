@@ -3,6 +3,7 @@ import type { SystemError } from "@effect/platform/Error";
 import { Effect, Ref } from "effect";
 import * as Schema from "effect/Schema";
 import { Json } from "../layers/json.js";
+import { DatabaseError } from "../core/errors.js";
 
 const BTreeNodeSchema = <K>(key_schema: Schema.Schema<any, K>) =>
   Schema.mutable(Schema.Struct({
@@ -50,7 +51,7 @@ export const makeBtreeService = <K>(
         Effect.flatMap(jsonService.parse),
         Effect.flatMap((data) => Schema.decode(node_schema)(data)),
         Effect.mapError(
-          (e) => new Error(`Failed to read node ${id}`, { cause: e })
+          (e) => new DatabaseError({ message: `Failed to read node ${id}`, cause: e })
         )
       );
 
@@ -61,7 +62,7 @@ export const makeBtreeService = <K>(
           fs.writeFileString(`${three_path}/${node.id}.json`, content)
         ),
         Effect.mapError(
-          (e) => new Error(`Failed to write node ${node.id}`, { cause: e })
+          (e) => new DatabaseError({ message: `Failed to write node ${node.id}`, cause: e })
         )
       );
 
@@ -127,7 +128,7 @@ export const makeBtreeService = <K>(
       node: BTreeNode<K>,
       key: K,
       value: string
-    ): Effect.Effect<void, Error | SystemError> =>
+    ): Effect.Effect<void, DatabaseError | SystemError> =>
       Effect.gen(function* () {
         let i = node.keys.length - 1;
         if (node.is_leaf) {
@@ -162,7 +163,7 @@ export const makeBtreeService = <K>(
     const findInNode = (
       node_id: string,
       key: K
-    ): Effect.Effect<string | undefined, Error | SystemError> =>
+    ): Effect.Effect<string | undefined, DatabaseError | SystemError> =>
       Effect.gen(function* () {
         const node = yield* readNode(node_id);
         let i = 0;
