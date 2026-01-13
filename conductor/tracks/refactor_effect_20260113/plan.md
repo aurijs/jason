@@ -19,8 +19,8 @@
 - [x] Task: Conductor - User Manual Verification 'Core Logic Refactoring' (Protocol in workflow.md) fded690
 
 ## Phase 3: Collection and Query API
-- [ ] Task: Refactor Collection CRUD operations to return Effects - [ ] Task: Write Tests for Collection - [ ] Task: Implement Refactor
-- [ ] Task: Refactor Query engine to use Effect - [ ] Task: Write Tests for Query - [ ] Task: Implement Refactor
+- [x] Task: Refactor Collection CRUD operations to return Effects e65e860 - [x] Task: Write Tests for Collection e65e860 - [x] Task: Implement Refactor e65e860
+- [~] Task: Refactor Query engine to use Effect - [ ] Task: Write Tests for Query - [ ] Task: Implement Refactor
 - [ ] Task: Conductor - User Manual Verification 'Collection and Query API' (Protocol in workflow.md)
 
 ## Phase 4: Final Integration and Cleanup
