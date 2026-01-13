@@ -18,10 +18,10 @@
 - [x] Task: Implement Refactor b0e8d05
 - [x] Task: Conductor - User Manual Verification 'Core Logic Refactoring' (Protocol in workflow.md) fded690
 
-## Phase 3: Collection and Query API
+## Phase 3: Collection and Query API [checkpoint: 751f245]
 - [x] Task: Refactor Collection CRUD operations to return Effects e65e860 - [x] Task: Write Tests for Collection e65e860 - [x] Task: Implement Refactor e65e860
 - [x] Task: Refactor Query engine to use Effect 4e65882 - [x] Task: Write Tests for Query 4e65882 - [x] Task: Implement Refactor 4e65882
-- [ ] Task: Conductor - User Manual Verification 'Collection and Query API' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Collection and Query API' (Protocol in workflow.md) 751f245
 
 ## Phase 4: Final Integration and Cleanup
 - [ ] Task: Update Main Entry point (JasonDB class) to Effect-based API - [ ] Task: Write Tests for Entry Point - [ ] Task: Implement Refactor
