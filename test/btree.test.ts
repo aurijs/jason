@@ -230,4 +230,45 @@ describe("BTree Service", () => {
     
     await Effect.runPromise(program);
   });
+
+  it("should delete keys from internal nodes", async () => {
+    const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+    
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        const order = 2;
+        
+        const btree = yield* makeBtreeService(
+          tempDir,
+          Schema.String,
+          order
+        );
+        
+        // Force an internal node to have keys.
+        // Order 2 means max 3 keys per node.
+        // Root split will create an internal node.
+        yield* btree.insert("b", "val-b");
+        yield* btree.insert("d", "val-d");
+        yield* btree.insert("f", "val-f");
+        yield* btree.insert("h", "val-h"); // This should cause split. 'd' should go to root.
+        
+        // 'd' is likely in the root (internal node if height > 1)
+        const deleted = yield* btree.delete("d");
+        expect(deleted).toBe(true);
+        expect(yield* btree.find("d")).toBeUndefined();
+        
+        // Check other keys are still there
+        expect(yield* btree.find("b")).toBe("val-b");
+        expect(yield* btree.find("f")).toBe("val-f");
+        expect(yield* btree.find("h")).toBe("val-h");
+
+        // Validate structure
+        yield* validateTree(fs, tempDir, Schema.String, order);
+      })
+    ).pipe(Effect.provide(TestLayer));
+    
+    await Effect.runPromise(program);
+  });
 });
