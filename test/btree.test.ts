@@ -186,4 +186,48 @@ describe("BTree Service", () => {
     ).pipe(Effect.provide(TestLayer));
     await Effect.runPromise(program);
   });
+
+  it("should delete keys from leaf nodes", async () => {
+    const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+    
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+         const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        const order = 3;
+        
+        const btree = yield* makeBtreeService(
+          tempDir,
+          Schema.String,
+          order
+        );
+        
+        yield* btree.insert("key1", "val1");
+        yield* btree.insert("key2", "val2");
+        yield* btree.insert("key3", "val3");
+        
+        // 1. Delete non-existent
+        const deletedMissing = yield* btree.delete("missing");
+        if (deletedMissing !== false) {
+             yield* Effect.fail(new Error("Expected delete('missing') to return false"));
+        }
+        
+        // 2. Delete existing leaf key
+        const deleted = yield* btree.delete("key2");
+        if (deleted !== true) {
+             yield* Effect.fail(new Error("Expected delete('key2') to return true"));
+        }
+        
+        const val = yield* btree.find("key2");
+        if (val !== undefined) {
+             yield* Effect.fail(new Error("Expected 'key2' to be gone"));
+        }
+
+        // Validate structure
+        yield* validateTree(fs, tempDir, Schema.String, order);
+      })
+    ).pipe(Effect.provide(TestLayer));
+    
+    await Effect.runPromise(program);
+  });
 });

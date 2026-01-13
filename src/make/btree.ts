@@ -182,6 +182,35 @@ export const makeBtreeService = <K>(
         return yield* findInNode(node.children[i], key);
       });
 
+    const deleteFromNode = (
+      node_id: string,
+      key: K
+    ): Effect.Effect<boolean, DatabaseError | SystemError> =>
+      Effect.gen(function* () {
+        const node = yield* readNode(node_id);
+        let i = 0;
+        while (i < node.keys.length && key > node.keys[i]) {
+          i++;
+        }
+
+        if (i < node.keys.length && key === node.keys[i]) {
+          if (node.is_leaf) {
+            (node.keys as K[]).splice(i, 1);
+            (node.values as string[]).splice(i, 1);
+            yield* writeNode(node);
+            return true;
+          } else {
+             return yield* Effect.die("Internal node deletion not implemented");
+          }
+        }
+
+        if (node.is_leaf) {
+          return false;
+        }
+
+        return yield* deleteFromNode(node.children[i], key);
+      });
+
     return {
       /**
        * Inserts a key-value pair into the B-tree.
@@ -220,6 +249,18 @@ export const makeBtreeService = <K>(
         );
 
         return semaphore.withPermits(1)(find_effect);
+      },
+      /**
+       * Deletes a key from the B-tree.
+       * @param key The key to delete.
+       * @returns true if the key was found and deleted, false otherwise.
+       */
+      delete: (key: K) => {
+          const delete_effect = Effect.gen(function* () {
+             const root_id = yield* Ref.get(rootIdRef);
+             return yield* deleteFromNode(root_id, key);
+          });
+          return semaphore.withPermits(1)(delete_effect);
       }
     };
   });
