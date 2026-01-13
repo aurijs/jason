@@ -206,6 +206,53 @@ export const makeBtreeService = <K>(
         };
       });
 
+    const borrowFromLeft = (parent: BTreeNode<K>, i: number, child: BTreeNode<K>, leftSibling: BTreeNode<K>) =>
+      Effect.gen(function* () {
+        child.keys.unshift(parent.keys[i - 1]);
+        child.values.unshift(parent.values[i - 1]);
+        if (!child.is_leaf) {
+          child.children.unshift(leftSibling.children.pop()!);
+        }
+
+        parent.keys[i - 1] = leftSibling.keys.pop()!;
+        parent.values[i - 1] = leftSibling.values.pop()!;
+
+        yield* Effect.all([writeNode(parent), writeNode(child), writeNode(leftSibling)], { concurrency: "inherit" });
+      });
+
+    const borrowFromRight = (parent: BTreeNode<K>, i: number, child: BTreeNode<K>, rightSibling: BTreeNode<K>) =>
+      Effect.gen(function* () {
+        child.keys.push(parent.keys[i]);
+        child.values.push(parent.values[i]);
+        if (!child.is_leaf) {
+          child.children.push(rightSibling.children.shift()!);
+        }
+
+        parent.keys[i] = rightSibling.keys.shift()!;
+        parent.values[i] = rightSibling.values.shift()!;
+
+        yield* Effect.all([writeNode(parent), writeNode(child), writeNode(rightSibling)], { concurrency: "inherit" });
+      });
+
+    const merge = (parent: BTreeNode<K>, i: number, leftChild: BTreeNode<K>, rightChild: BTreeNode<K>) =>
+      Effect.gen(function* () {
+        leftChild.keys.push(parent.keys[i]);
+        leftChild.values.push(parent.values[i]);
+
+        leftChild.keys.push(...rightChild.keys);
+        leftChild.values.push(...rightChild.values);
+        if (!leftChild.is_leaf) {
+          leftChild.children.push(...rightChild.children);
+        }
+
+        parent.keys.splice(i, 1);
+        parent.values.splice(i, 1);
+        parent.children.splice(i + 1, 1);
+
+        yield* Effect.all([writeNode(parent), writeNode(leftChild)], { concurrency: "inherit" });
+        // NOTE: rightChild is now abandoned/garbage. In a real system we'd free its disk space.
+      });
+
     const deleteFromNode = (
       node_id: string,
       key: K
@@ -243,10 +290,8 @@ export const makeBtreeService = <K>(
              }
              
              // Both have order - 1 keys. Merge them.
-             // We need a merge utility or implement it here.
-             // For now, let's keep it simple and just return false or die if not handled.
-             // Actually, I should probably implement rebalancing (borrow/merge) to be complete.
-             return yield* Effect.die("Internal node merge deletion not implemented");
+             yield* merge(node, i, leftChild, rightChild);
+             return yield* deleteFromNode(leftChild.id, key);
           }
         }
 
@@ -254,7 +299,29 @@ export const makeBtreeService = <K>(
           return false;
         }
 
-        return yield* deleteFromNode(node.children[i], key);
+        // Key is not in this internal node. Ensure child node has enough keys.
+        let child = yield* readNode(node.children[i]);
+        if (child.keys.length < order) {
+            // Rebalance child
+            const leftSibling = i > 0 ? yield* readNode(node.children[i - 1]) : undefined;
+            const rightSibling = i < node.keys.length ? yield* readNode(node.children[i + 1]) : undefined;
+
+            if (leftSibling && leftSibling.keys.length >= order) {
+                yield* borrowFromLeft(node, i, child, leftSibling);
+            } else if (rightSibling && rightSibling.keys.length >= order) {
+                yield* borrowFromRight(node, i, child, rightSibling);
+            } else {
+                // Merge
+                if (leftSibling) {
+                    yield* merge(node, i - 1, leftSibling, child);
+                    child = leftSibling;
+                } else if (rightSibling) {
+                    yield* merge(node, i, child, rightSibling);
+                }
+            }
+        }
+
+        return yield* deleteFromNode(child.id, key);
       });
 
     return {

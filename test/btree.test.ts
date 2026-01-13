@@ -271,4 +271,128 @@ describe("BTree Service", () => {
     
     await Effect.runPromise(program);
   });
+
+  it("should rebalance by borrowing from sibling", async () => {
+    const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+    
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        const order = 3; // Min keys = 2
+        
+        const btree = yield* makeBtreeService(
+          tempDir,
+          Schema.String,
+          order
+        );
+        
+        // Setup a situation where we can borrow.
+        // Root: [d]
+        // Child0: [a, b, c] (can spare one)
+        // Child1: [e, f] (at minimum)
+        yield* btree.insert("d", "4");
+        yield* btree.insert("a", "1");
+        yield* btree.insert("b", "2");
+        yield* btree.insert("c", "3");
+        yield* btree.insert("e", "5");
+        yield* btree.insert("f", "6");
+        
+        // Deleting 'f' makes Child1 have 1 key (underflow).
+        // It should borrow from Child0.
+        const deleted = yield* btree.delete("f");
+        expect(deleted).toBe(true);
+        expect(yield* btree.find("f")).toBeUndefined();
+        
+        // Validate all other keys
+        for (const k of ["a", "b", "c", "d", "e"]) {
+            expect(yield* btree.find(k)).toBeDefined();
+        }
+
+        // Validate structure
+        yield* validateTree(fs, tempDir, Schema.String, order);
+      })
+    ).pipe(Effect.provide(TestLayer));
+    
+    await Effect.runPromise(program);
+  });
+
+  it("should rebalance by merging nodes", async () => {
+    const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+    
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        const order = 3; // Min keys = 2
+        
+        const btree = yield* makeBtreeService(
+          tempDir,
+          Schema.String,
+          order
+        );
+        
+        // Setup: Root [d], Child0 [b, c], Child1 [e, f]
+        yield* btree.insert("d", "4");
+        yield* btree.insert("b", "2");
+        yield* btree.insert("c", "3");
+        yield* btree.insert("e", "5");
+        yield* btree.insert("f", "6");
+        
+        // Both children are at minimum (2 keys).
+        // Deleting 'f' should trigger merge of Child0 and Child1.
+        const deleted = yield* btree.delete("f");
+        expect(deleted).toBe(true);
+        
+        // Validate all other keys
+        for (const k of ["b", "c", "d", "e"]) {
+            expect(yield* btree.find(k)).toBeDefined();
+        }
+
+        // Validate structure
+        yield* validateTree(fs, tempDir, Schema.String, order);
+      })
+    ).pipe(Effect.provide(TestLayer));
+    
+    await Effect.runPromise(program);
+  });
+
+  it("should reduce tree height when root becomes empty", async () => {
+    const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+    
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        const order = 2; // Max 3 keys per node.
+        
+        const btree = yield* makeBtreeService(
+          tempDir,
+          Schema.String,
+          order
+        );
+        
+        // Setup height 2 tree.
+        // Insert enough to cause a split and have root with 1 key.
+        yield* btree.insert("a", "1");
+        yield* btree.insert("b", "2");
+        yield* btree.insert("c", "3");
+        yield* btree.insert("d", "4"); 
+        // Root now likely has 'b' or 'c'. Children are [a] and [c, d] or [a, b] and [d].
+        
+        // Delete until root needs to be merged and height reduced.
+        yield* btree.delete("a");
+        yield* btree.delete("b");
+        yield* btree.delete("c");
+        yield* btree.delete("d");
+
+        expect(yield* btree.find("a")).toBeUndefined();
+        
+        // Validate structure
+        yield* validateTree(fs, tempDir, Schema.String, order);
+      })
+    ).pipe(Effect.provide(TestLayer));
+    
+    await Effect.runPromise(program);
+  });
 });
