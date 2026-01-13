@@ -4,7 +4,7 @@ import { DatabaseError } from "../core/errors.js";
 import { ConfigManager } from "../layers/config.js";
 import { makeIndexService } from "../layers/index.js";
 import { WriteAheadLog } from "../layers/wal.js";
-import type { QueryOptions } from "../types/collection.js";
+import type { BatchResult, Filter, QueryOptions } from "../types/collection.js";
 import { makeMetadata } from "./metadata.js";
 import { makeQuery } from "./query.js";
 import { makeStorageManager } from "./storage-manager.js";
@@ -17,8 +17,6 @@ export const makeCollection = <Doc extends Record<string, any>>(
     const fs = yield* FileSystem.FileSystem;
     const config = yield* ConfigManager;
     const wal = yield* WriteAheadLog;
-    const storage = yield* makeStorageManager<Doc>(collection_name);
-    const queryManager = yield* makeQuery<Doc>(collection_name);
 
     // load path, schema and index
     const collection_path = yield* config.getCollectionPath(collection_name);
@@ -26,10 +24,27 @@ export const makeCollection = <Doc extends Record<string, any>>(
     // make index if it's non existent
     yield* fs.makeDirectory(collection_path, { recursive: true });
 
+    const storage = yield* makeStorageManager<Doc>(collection_name);
     const indexService = yield* makeIndexService(collection_name);
     const metadataService = yield* makeMetadata(collection_name);
+    const queryManager = yield* makeQuery<Doc>(collection_name, indexService, storage);
 
     return {
+      batch: {
+        insert: (_docs: Doc[]) =>
+          Effect.fail(
+            new DatabaseError({ message: "batch.insert not implemented" })
+          ),
+        delete: (_filter: Filter<Doc>) =>
+          Effect.fail(
+            new DatabaseError({ message: "batch.delete not implemented" })
+          ),
+        update: (_filter: Filter<Doc>, _data: Partial<Omit<Doc, "id">>) =>
+          Effect.fail(
+            new DatabaseError({ message: "batch.update not implemented" })
+          )
+      },
+
       find: queryManager.find,
 
       create: (data: Doc) =>
@@ -56,7 +71,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
             )
           );
 
-          yield* Effect.forkScoped(post_write);
+          yield* post_write;
 
           return new_document;
         }).pipe(

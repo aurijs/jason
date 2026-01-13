@@ -8,10 +8,12 @@ import type { DatabaseError, JsonError } from "../core/errors.js";
 import type { ParseSchemaString, SchemaOrString } from "./schema.js";
 import type { ParseError } from "effect/ParseResult";
 
+import type { FilterExpression } from "./query.js";
+
 /**
  * A filter object used to specify criteria for querying documents in a collection.
  */
-export type Filter<Doc> = Partial<Doc>;
+export type Filter<Doc> = FilterExpression<Doc>;
 
 interface OrderBy<Doc> {
   /**
@@ -59,10 +61,80 @@ export interface QueryOptions<Doc> {
 }
 
 /**
+ * The result of a batch operation.
+ */
+export interface BatchResult {
+  /** The number of successful operations. */
+  success: number;
+  /** A list of failed operations with their index or ID and error message. */
+  failures: Array<{ index?: number; id?: string; error: string }>;
+}
+
+/**
+ * Represents batch operations on a collection, returning `Effect` computations.
+ */
+export interface BatchOperationsEffect<Doc> {
+  /**
+   * Inserts multiple documents into the collection.
+   * @param docs The array of documents to insert.
+   * @returns An `Effect` that resolves to a `BatchResult`.
+   */
+  insert: (docs: Doc[]) => Effect.Effect<BatchResult, DatabaseError>;
+  /**
+   * Deletes multiple documents matching the filter.
+   * @param filter The filter to match documents for deletion.
+   * @returns An `Effect` that resolves to a `BatchResult`.
+   */
+  delete: (filter: Filter<Doc>) => Effect.Effect<BatchResult, DatabaseError>;
+  /**
+   * Updates multiple documents matching the filter.
+   * @param filter The filter to match documents for update.
+   * @param data The partial data to update in matching documents.
+   * @returns An `Effect` that resolves to a `BatchResult`.
+   */
+  update: (
+    filter: Filter<Doc>,
+    data: Partial<Omit<Doc, "id">>
+  ) => Effect.Effect<BatchResult, DatabaseError>;
+}
+
+/**
+ * Represents batch operations on a collection.
+ */
+export interface BatchOperations<Doc> {
+  /**
+   * Inserts multiple documents into the collection.
+   * @param docs The array of documents to insert.
+   * @returns A promise that resolves to a `BatchResult`.
+   */
+  insert: (docs: Doc[]) => Promise<BatchResult>;
+  /**
+   * Deletes multiple documents matching the filter.
+   * @param filter The filter to match documents for deletion.
+   * @returns A promise that resolves to a `BatchResult`.
+   */
+  delete: (filter: Filter<Doc>) => Promise<BatchResult>;
+  /**
+   * Updates multiple documents matching the filter.
+   * @param filter The filter to match documents for update.
+   * @param data The partial data to update in matching documents.
+   * @returns A promise that resolves to a `BatchResult`.
+   */
+  update: (
+    filter: Filter<Doc>,
+    data: Partial<Omit<Doc, "id">>
+  ) => Promise<BatchResult>;
+}
+
+/**
  * Represents a collection of documents, with methods that return `Effect` computations.
  * This interface is for users who prefer to work within the `Effect` ecosystem for handling asynchronous operations and errors.
  */
 export interface CollectionEffect<Doc> {
+  /**
+   * Batch operations for the collection.
+   */
+  batch: BatchOperationsEffect<Doc>;
   /**
    * Creates a new document in the collection.
    * @param data The data for the new document, excluding the 'id'.
@@ -123,6 +195,10 @@ export interface CollectionEffect<Doc> {
  * Represents a collection of documents in the database.
  */
 export interface Collection<Doc> {
+  /**
+   * Batch operations for the collection.
+   */
+  batch: BatchOperations<Doc>;
   /**
    * Creates a new document in the collection.
    * @param data - The data to be stored in the document.
@@ -186,10 +262,10 @@ export interface Collection<Doc> {
  */
 export type InferCollections<T extends Record<string, SchemaOrString>> = {
   [K in keyof T]: T[K] extends Schema.Schema<infer A, any>
-  ? A
-  : T[K] extends string
-  ? ParseSchemaString<T[K]>
-  : any;
+    ? A
+    : T[K] extends string
+      ? ParseSchemaString<T[K]>
+      : any;
 };
 
 /**

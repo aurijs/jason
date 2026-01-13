@@ -151,28 +151,29 @@ export const createJasonDBLayer = <
 /**
  * Creates a Promise client from an Effect service.
  *
- * @param effect_service A Record of functions that return Effects.
+ * @param effect_service A Record of functions that return Effects or nested objects of such functions.
  * @param run A function that takes an Effect and returns a Promise of the Effect's result.
- * @returns A Record where each key is a function that returns a Promise of the Effect's result.
+ * @returns A Record where each key is a function that returns a Promise or a nested object.
  */
-function createPromiseClient<T extends CollectionEffect<any>>(
-  effect_service: CollectionEffect<T>,
+function createPromiseClient(
+  effect_service: any,
   run: (effect: Effect.Effect<any, any, any>) => Promise<any>
 ) {
-  const promise_client = {} as Collection<any>;
+  const promise_client = {} as any;
 
-  (Object.keys(effect_service) as Array<keyof CollectionEffect<T>>).forEach(
-    (key) => {
-      const prop = effect_service[key];
+  Object.keys(effect_service).forEach((key) => {
+    const prop = effect_service[key];
 
-      if (typeof prop === "function") {
-        const effectFn = prop as (
-          ...args: any[]
-        ) => Effect.Effect<any, any, any>;
-        promise_client[key] = (...args: any[]) => run(effectFn(...args));
-      }
+    if (typeof prop === "function") {
+      promise_client[key] = (...args: any[]) => run(prop(...args));
+    } else if (
+      typeof prop === "object" &&
+      prop !== null &&
+      !Effect.isEffect(prop)
+    ) {
+      promise_client[key] = createPromiseClient(prop, run);
     }
-  );
+  });
 
   return promise_client;
 }
