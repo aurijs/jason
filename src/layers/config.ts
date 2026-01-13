@@ -1,5 +1,4 @@
 import { Path } from "@effect/platform";
-import { NodeContext } from "@effect/platform-node";
 import { Effect, Schema } from "effect";
 import type { JasonDBConfig } from "../types/collection.js";
 import {
@@ -12,7 +11,6 @@ import type { IndexDefinition } from "../types/metadata.js";
 export class ConfigManager extends Effect.Service<ConfigManager>()(
   "ConfigManager",
   {
-    dependencies: [NodeContext.layer],
     effect: (config: JasonDBConfig<any>) =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
