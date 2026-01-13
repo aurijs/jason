@@ -55,7 +55,7 @@ export const makeIndexService = <Doc extends { id?: string }>(
             }
 
             if (old_value !== undefined) {
-              // TODO: Remove old value from index
+              yield* btree.delete(old_value as any);
             }
 
             // Insert new value into index

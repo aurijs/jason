@@ -116,14 +116,20 @@ describe("BTree Service", () => {
         yield* btree.insert("key2", "value2");
         yield* btree.insert("key3", "value3");
 
-        expect(yield* btree.find("key1")).toBe("value1");
-        expect(yield* btree.find("key2")).toBe("value2");
-        expect(yield* btree.find("key3")).toBe("value3");
-        expect(yield* btree.find("key4")).toBeUndefined();
+        const val1 = yield* btree.find("key1");
+        const val2 = yield* btree.find("key2");
+        const val3 = yield* btree.find("key3");
+        const val4 = yield* btree.find("key4");
+
+        return { val1, val2, val3, val4 };
       })
     ).pipe(Effect.provide(BunContext.layer));
 
-    await Effect.runPromise(program);
+    const { val1, val2, val3, val4 } = await Effect.runPromise(program);
+    expect(val1).toBe("value1");
+    expect(val2).toBe("value2");
+    expect(val3).toBe("value3");
+    expect(val4).toBeUndefined();
   });
 
   it("should handle splits correctly", async () => {
@@ -150,14 +156,20 @@ describe("BTree Service", () => {
         // Next insert should cause split
         yield* btree.insert("d", "4");
 
-        expect(yield* btree.find("a")).toBe("1");
-        expect(yield* btree.find("b")).toBe("2");
-        expect(yield* btree.find("c")).toBe("3");
-        expect(yield* btree.find("d")).toBe("4");
+        const valA = yield* btree.find("a");
+        const valB = yield* btree.find("b");
+        const valC = yield* btree.find("c");
+        const valD = yield* btree.find("d");
+        
+        return { valA, valB, valC, valD };
       })
     ).pipe(Effect.provide(BunContext.layer));
 
-    await Effect.runPromise(program);
+    const { valA, valB, valC, valD } = await Effect.runPromise(program);
+    expect(valA).toBe("1");
+    expect(valB).toBe("2");
+    expect(valC).toBe("3");
+    expect(valD).toBe("4");
   });
 
   it("should maintain valid tree structure", async () => {
@@ -256,20 +268,26 @@ describe("BTree Service", () => {
         
         // 'd' is likely in the root (internal node if height > 1)
         const deleted = yield* btree.delete("d");
-        expect(deleted).toBe(true);
-        expect(yield* btree.find("d")).toBeUndefined();
+        const valD = yield* btree.find("d");
         
         // Check other keys are still there
-        expect(yield* btree.find("b")).toBe("val-b");
-        expect(yield* btree.find("f")).toBe("val-f");
-        expect(yield* btree.find("h")).toBe("val-h");
+        const valB = yield* btree.find("b");
+        const valF = yield* btree.find("f");
+        const valH = yield* btree.find("h");
 
         // Validate structure
         yield* validateTree(fs, tempDir, Schema.String, order);
+        
+        return { deleted, valD, valB, valF, valH };
       })
     ).pipe(Effect.provide(TestLayer));
     
-    await Effect.runPromise(program);
+    const { deleted, valD, valB, valF, valH } = await Effect.runPromise(program);
+    expect(deleted).toBe(true);
+    expect(valD).toBeUndefined();
+    expect(valB).toBe("val-b");
+    expect(valF).toBe("val-f");
+    expect(valH).toBe("val-h");
   });
 
   it("should rebalance by borrowing from sibling", async () => {
@@ -301,20 +319,27 @@ describe("BTree Service", () => {
         // Deleting 'f' makes Child1 have 1 key (underflow).
         // It should borrow from Child0.
         const deleted = yield* btree.delete("f");
-        expect(deleted).toBe(true);
-        expect(yield* btree.find("f")).toBeUndefined();
+        const valF = yield* btree.find("f");
         
         // Validate all other keys
+        const others: Record<string, string | undefined> = {};
         for (const k of ["a", "b", "c", "d", "e"]) {
-            expect(yield* btree.find(k)).toBeDefined();
+            others[k] = yield* btree.find(k);
         }
 
         // Validate structure
         yield* validateTree(fs, tempDir, Schema.String, order);
+
+        return { deleted, valF, others };
       })
     ).pipe(Effect.provide(TestLayer));
     
-    await Effect.runPromise(program);
+    const { deleted, valF, others } = await Effect.runPromise(program);
+    expect(deleted).toBe(true);
+    expect(valF).toBeUndefined();
+    for (const k of ["a", "b", "c", "d", "e"]) {
+        expect(others[k]).toBeDefined();
+    }
   });
 
   it("should rebalance by merging nodes", async () => {
@@ -342,19 +367,25 @@ describe("BTree Service", () => {
         // Both children are at minimum (2 keys).
         // Deleting 'f' should trigger merge of Child0 and Child1.
         const deleted = yield* btree.delete("f");
-        expect(deleted).toBe(true);
         
         // Validate all other keys
+        const others: Record<string, string | undefined> = {};
         for (const k of ["b", "c", "d", "e"]) {
-            expect(yield* btree.find(k)).toBeDefined();
+            others[k] = yield* btree.find(k);
         }
 
         // Validate structure
         yield* validateTree(fs, tempDir, Schema.String, order);
+
+        return { deleted, others };
       })
     ).pipe(Effect.provide(TestLayer));
     
-    await Effect.runPromise(program);
+    const { deleted, others } = await Effect.runPromise(program);
+    expect(deleted).toBe(true);
+    for (const k of ["b", "c", "d", "e"]) {
+        expect(others[k]).toBeDefined();
+    }
   });
 
   it("should reduce tree height when root becomes empty", async () => {
@@ -386,13 +417,61 @@ describe("BTree Service", () => {
         yield* btree.delete("c");
         yield* btree.delete("d");
 
-        expect(yield* btree.find("a")).toBeUndefined();
+        const valA = yield* btree.find("a");
         
         // Validate structure
         yield* validateTree(fs, tempDir, Schema.String, order);
+
+        return { valA };
       })
     ).pipe(Effect.provide(TestLayer));
     
-    await Effect.runPromise(program);
+    const { valA } = await Effect.runPromise(program);
+    expect(valA).toBeUndefined();
   });
+
+  it("should maintain invariants during randomized operations", async () => {
+    const TestLayer = Layer.mergeAll(Json.Default, BunContext.layer);
+    
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        const order = 2;
+        
+        const btree = yield* makeBtreeService(
+          tempDir,
+          Schema.String,
+          order
+        );
+        
+        const keys = Array.from({ length: 50 }, (_, i) => `key-${i.toString().padStart(2, "0")}`);
+        
+        // 1. Random Inserts
+        const shuffledInserts = [...keys].sort(() => Math.random() - 0.5);
+        for (const key of shuffledInserts) {
+            yield* btree.insert(key, `val-${key}`);
+            yield* validateTree(fs, tempDir, Schema.String, order);
+        }
+        
+        // 2. Random Deletes
+        const shuffledDeletes = [...keys].sort(() => Math.random() - 0.5);
+        const deleteResults: Record<string, { deleted: boolean, foundAfter: string | undefined }> = {};
+        for (const key of shuffledDeletes) {
+            const deleted = yield* btree.delete(key);
+            const foundAfter = yield* btree.find(key);
+            deleteResults[key] = { deleted, foundAfter };
+            yield* validateTree(fs, tempDir, Schema.String, order);
+        }
+
+        return { shuffledDeletes, deleteResults };
+      })
+    ).pipe(Effect.provide(TestLayer));
+    
+    const { shuffledDeletes, deleteResults } = await Effect.runPromise(program);
+    for (const key of shuffledDeletes) {
+        expect(deleteResults[key].deleted).toBe(true);
+        expect(deleteResults[key].foundAfter).toBeUndefined();
+    }
+  }, 30000);
 });

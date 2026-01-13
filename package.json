@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "lint": "biome check src --apply",
+    "lint": "oxlint src && prettier --check src",
+    "format": "prettier --write src",
     "test:watch": "vitest watch",
     "test:coverage": "vitest --coverage",
     "clean": "rm -rf dist",
