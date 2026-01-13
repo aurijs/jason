@@ -4,7 +4,7 @@
   "version": "1.6.6",
   "scripts": {
     "build": "tsup",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "biome check src --apply",
     "test:watch": "vitest watch",
     "test:coverage": "vitest --coverage",
