@@ -15,13 +15,13 @@
     - [x] Sub-task: Write failing test: Delete key from internal node (requires replacing with predecessor/successor).
     - [x] Sub-task: Implement logic to swap with predecessor/successor and delete from child.
     - [x] Sub-task: Verify tests pass.
-- [~] Task: Implement Rebalancing (Borrow & Merge)
-    - [ ] Sub-task: Write failing test: Delete causing underflow (requires borrowing from sibling).
-    - [ ] Sub-task: Write failing test: Delete causing underflow (requires merging with sibling).
-    - [ ] Sub-task: Write failing test: Delete causing root height reduction.
-    - [ ] Sub-task: Implement `rebalance` logic (borrowLeft, borrowRight, merge).
-    - [ ] Sub-task: Verify tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Complex Deletion & Rebalancing' (Protocol in workflow.md)
+- [x] Task: Implement Rebalancing (Borrow & Merge) df9c2f1
+    - [x] Sub-task: Write failing test: Delete causing underflow (requires borrowing from sibling).
+    - [x] Sub-task: Write failing test: Delete causing underflow (requires merging with sibling).
+    - [x] Sub-task: Write failing test: Delete causing root height reduction.
+    - [x] Sub-task: Implement `rebalance` logic (borrowLeft, borrowRight, merge).
+    - [x] Sub-task: Verify tests pass.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Complex Deletion & Rebalancing' (Protocol in workflow.md)
 
 ## Phase 3: Reliability & Cleanup
 - [ ] Task: Property-Based Testing
