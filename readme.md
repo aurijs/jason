@@ -39,7 +39,7 @@ npm i @aurios/jason
 ## 💻 Quick Example
 
 ```typescript
-import { createJasonDB } from "@aurios/jason";
+import { createJasonDB, gte } from "@aurios/jason";
 
 // Initialize the database
 const db = await createJasonDB({
@@ -60,10 +60,10 @@ await users.create({
   isActive: true
 });
 
-// Find documents
+// Find documents using helper functions
 const adults = await users.find({
   where: { 
-    age: { _tag: "gte", value: 18 } 
+    age: gte(18) 
   }
 });
 ```
@@ -127,29 +127,59 @@ const exists = await collection.has(post.id);
 
 ### 🔍 Querying
 
-Use `find` or `findOne` with a rich query language.
+JasonDB provides a rich set of query helpers for filtering data.
 
 ```typescript
+import { gt, startsWith, and, or } from "@aurios/jason";
+
 // Simple equality
 const results = await collection.find({
   where: { published: true }
 });
 
 // Comparison operators
-// Available tags: eq, ne, gt, gte, lt, lte, in, nin, startsWith, regex
 const recent = await collection.find({
   where: { 
-    views: { _tag: "gt", value: 100 },
-    title: { _tag: "startsWith", value: "How to" }
+    views: gt(100),
+    title: startsWith("How to")
   },
   order_by: { field: "createdAt", order: "desc" },
   limit: 10
 });
 
-// Batch Operations
-await collection.batch.insert([ ... ]);
-await collection.batch.update({ category: "tech" }, { published: true });
-await collection.batch.delete({ archived: true });
+// Logical operators
+const complex = await collection.find({
+  where: or(
+      { category: "tech" },
+      { views: gt(1000) }
+  )
+});
+```
+
+### 📦 Batch Operations
+
+Perform bulk actions efficiently using the `batch` API.
+
+```typescript
+// Batch Insert
+await collection.batch.insert([
+  { name: "Doc 1", value: 10 },
+  { name: "Doc 2", value: 20 },
+  { name: "Doc 3", value: 30 }
+]);
+
+// Batch Update
+// Updates all documents where category is "old_tech"
+await collection.batch.update(
+  { category: "old_tech" }, // Filter
+  { category: "retro_tech", active: false } // Update data
+);
+
+// Batch Delete
+// Deletes all archived documents
+await collection.batch.delete({ 
+  archived: true 
+});
 ```
 
 ## 🤝 Contributing
