@@ -15,15 +15,15 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 1: API Scaffolding & Bulk Insertion' (Protocol in workflow.md) (b924a5e)
 
 ## Phase 2: Bulk Deletion & Update
-- [ ] Task: Implement `collection.batch.delete`
-    - [ ] Sub-task: Write failing test: `batch.delete` with a filter removes multiple documents.
-    - [ ] Sub-task: Implement `delete` logic in `src/core/main.ts` using the query engine to find IDs and removing them in a loop within a single lock.
-    - [ ] Sub-task: Verify tests pass.
-- [ ] Task: Implement `collection.batch.update`
-    - [ ] Sub-task: Write failing test: `batch.update` with a filter modifies multiple documents.
-    - [ ] Sub-task: Implement `update` logic in `src/core/main.ts`.
-    - [ ] Sub-task: Verify tests pass.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Bulk Deletion & Update' (Protocol in workflow.md)
+- [x] Task: Implement `collection.batch.delete` (56b8a2d)
+    - [x] Sub-task: Write failing test: `batch.delete` with a filter removes multiple documents.
+    - [x] Sub-task: Implement `delete` logic in `src/core/main.ts` using the query engine to find IDs and removing them in a loop within a single lock.
+    - [x] Sub-task: Verify tests pass.
+- [x] Task: Implement `collection.batch.update` (56b8a2d)
+    - [x] Sub-task: Write failing test: `batch.update` with a filter modifies multiple documents.
+    - [x] Sub-task: Implement `update` logic in `src/core/main.ts`.
+    - [x] Sub-task: Verify tests pass.
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Bulk Deletion & Update' (Protocol in workflow.md) (56b8a2d)
 
 ## Phase 3: Validation & Performance
 - [ ] Task: Performance Benchmarking
