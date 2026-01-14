@@ -98,6 +98,14 @@ export class JsonError extends Schema.TaggedError<JsonError>()("JsonError", {
   cause: Schema.Unknown
 }) {}
 
+export class ValidationError extends Schema.TaggedError<ValidationError>()(
+  "ValidationError",
+  {
+    message: Schema.String,
+    issues: Schema.Array(Schema.Any)
+  }
+) {}
+
 export const CoreError = Schema.Union(
   WalWriteError,
   WalReplayError,
@@ -109,7 +117,8 @@ export const CoreError = Schema.Union(
   DocumentNotFoundError,
   DeleteOperationError,
   QueryOperationError,
-  JsonError
+  JsonError,
+  ValidationError
 );
 
 export type CoreError = Schema.Schema.Type<typeof CoreError>;

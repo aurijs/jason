@@ -142,7 +142,7 @@ export const createJasonDBLayer = <
   const T extends Record<string, SchemaOrString>
 >(
   config: JasonDBConfig<T>
-): Layer.Layer<JasonDB, Error, FileSystem.FileSystem | Path.Path> => {
+) => {
   const ConfigLayer = ConfigManager.Default(config);
 
   const BaseInfraLayer = Layer.mergeAll(
@@ -204,10 +204,10 @@ export const createJasonDB = async <
   );
   const scope = await Effect.runPromise(Scope.make());
   const context = await Effect.runPromise(
-    Layer.build(layer).pipe(Scope.extend(scope))
+    Layer.buildWithScope(layer, scope) as any
   );
 
-  const context_with_scope = Context.add(context, Scope.Scope, scope);
+  const context_with_scope = Context.add(context as any, Scope.Scope, scope);
   const runtime = Runtime.make({
     ...Runtime.defaultRuntime,
     context: context_with_scope
