@@ -4,7 +4,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [x] Track: Implement Bulk Operations API (batch.insert, batch.delete, batch.update) with WAL optimization.
+## [~] Track: Implement Bulk Operations API (batch.insert, batch.delete, batch.update) with WAL optimization.
 *Link: [./conductor/tracks/bulk_operations_api_20260113/](./conductor/tracks/bulk_operations_api_20260113/)*
 
 ---

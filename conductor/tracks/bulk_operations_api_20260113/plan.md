@@ -4,15 +4,15 @@
 - [x] Task: Define Batch API Interfaces
     - [x] Sub-task: Create `BatchResult` and `BatchOperations` types in `src/types/collection.ts`.
     - [x] Sub-task: Update `Collection` interface to include the `batch` namespace.
-- [ ] Task: Implement `collection.batch.insert`
-    - [ ] Sub-task: Write failing test: `batch.insert` with 10 documents returns success summary.
-    - [ ] Sub-task: Write failing test: `batch.insert` with some invalid documents (schema violation) returns partial failure summary (Best-Effort).
-    - [ ] Sub-task: Implement `insert` logic in `src/core/main.ts` under the `batch` object.
-    - [ ] Sub-task: Verify tests pass.
-- [ ] Task: Optimize WAL for Batch
-    - [ ] Sub-task: Update WAL service in `src/layers/wal.ts` to support a `logBatch` method (or handle array of operations).
-    - [ ] Sub-task: Refactor `batch.insert` to use a single WAL write.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: API Scaffolding & Bulk Insertion' (Protocol in workflow.md)
+- [x] Task: Implement `collection.batch.insert` (b924a5e)
+    - [x] Sub-task: Write failing test: `batch.insert` with 10 documents returns success summary.
+    - [x] Sub-task: Write failing test: `batch.insert` with some invalid documents (schema violation) returns partial failure summary (Best-Effort).
+    - [x] Sub-task: Implement `insert` logic in `src/core/main.ts` under the `batch` object.
+    - [x] Sub-task: Verify tests pass.
+- [x] Task: Optimize WAL for Batch (b924a5e)
+    - [x] Sub-task: Update WAL service in `src/layers/wal.ts` to support a `logBatch` method (or handle array of operations).
+    - [x] Sub-task: Refactor `batch.insert` to use a single WAL write.
+- [x] Task: Conductor - User Manual Verification 'Phase 1: API Scaffolding & Bulk Insertion' (Protocol in workflow.md) (b924a5e)
 
 ## Phase 2: Bulk Deletion & Update
 - [ ] Task: Implement `collection.batch.delete`
