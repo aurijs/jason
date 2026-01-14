@@ -25,7 +25,7 @@
     - [x] Sub-task: Verify tests pass.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Bulk Deletion & Update' (Protocol in workflow.md) (56b8a2d)
 
-## Phase 3: Validation & Performance
+## Phase 3: Validation & Performance (Checkpoint: b5a6c82)
 - [x] Task: Performance Benchmarking (36c9cc7)
     - [x] Sub-task: Create a benchmark test comparing 1000 single inserts vs 1 `batch.insert`.
     - [x] Sub-task: Ensure the performance gain is significant (>10x).
