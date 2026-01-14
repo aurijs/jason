@@ -14,7 +14,7 @@
     - [x] Sub-task: Refactor `batch.insert` to use a single WAL write.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: API Scaffolding & Bulk Insertion' (Protocol in workflow.md) (b924a5e)
 
-## Phase 2: Bulk Deletion & Update
+## Phase 2: Bulk Deletion & Update (Checkpoint: 37ddbbf)
 - [x] Task: Implement `collection.batch.delete` (56b8a2d)
     - [x] Sub-task: Write failing test: `batch.delete` with a filter removes multiple documents.
     - [x] Sub-task: Implement `delete` logic in `src/core/main.ts` using the query engine to find IDs and removing them in a loop within a single lock.
