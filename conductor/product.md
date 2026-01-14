@@ -16,7 +16,11 @@ JasonDB aims to be the premier JSON database for the Bun ecosystem, bridging the
 
 ## Key Features
 
-- **TypeScript Integration:** First-class support for types and runtime schema validation using Effect.ts Schema.
+- **High-Performance Bulk Operations:** Dedicated `batch` API for inserts, updates, and deletes, optimized with Write-Ahead Log (WAL) grouping for high-throughput data ingestion.
+
+- **In-Memory Caching:** Smart LRU caching at both document and index levels to minimize disk I/O and provide sub-millisecond read performance.
+
+- **Flexible Schema Validation:** Support for both Effect Schema and any library implementing `@standard-schema/spec` (like Zod, Valibot, or ArkType), providing first-class type safety and runtime validation.
 
 - **Concurrency & Versioning:** Robust conflict resolution and document history tracking.
 

@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect";
 import { Json } from "./json.js";
 import { isStandardSchema } from "../utils.js";
 import type { AnySchema } from "./config.js";
+import { ValidationError } from "../core/errors.js";
 
 export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
   dependencies: [Json.Default, NodeContext.layer],
@@ -24,16 +25,19 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
               return Effect.tryPromise({
                 try: () =>
                   Promise.resolve(schema["~standard"].validate(parsedJson)),
-                catch: (e) => new Error(`Validation failed: ${e}`)
+                catch: (e) =>
+                  new ValidationError({
+                    message: `Validation failed: ${e}`,
+                    issues: []
+                  })
               }).pipe(
                 Effect.flatMap((result) => {
                   if (result.issues) {
                     return Effect.fail(
-                      new Error(
-                        `Validation failed: ${result.issues
-                          .map((i) => i.message)
-                          .join(", ")}`
-                      )
+                      new ValidationError({
+                        message: "Validation failed",
+                        issues: result.issues as any
+                      })
                     );
                   }
                   return Effect.succeed(result.value);
@@ -52,16 +56,19 @@ export class JsonFile extends Effect.Service<JsonFile>()("JsonFile", {
         const validate = isStandardSchema(schema)
           ? Effect.tryPromise({
               try: () => Promise.resolve(schema["~standard"].validate(data)),
-              catch: (e) => new Error(`Validation failed: ${e}`)
+              catch: (e) =>
+                new ValidationError({
+                  message: `Validation failed: ${e}`,
+                  issues: []
+                })
             }).pipe(
               Effect.flatMap((result) => {
                 if (result.issues) {
                   return Effect.fail(
-                    new Error(
-                      `Validation failed: ${result.issues
-                        .map((i) => i.message)
-                        .join(", ")}`
-                    )
+                    new ValidationError({
+                      message: "Validation failed",
+                      issues: result.issues as any
+                    })
                   );
                 }
                 return Effect.succeed(result.value);

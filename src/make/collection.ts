@@ -9,6 +9,8 @@ import { makeMetadata } from "./metadata.js";
 import { makeQuery } from "./query.js";
 import { makeStorageManager } from "./storage-manager.js";
 
+import { ValidationError } from "../core/errors.js";
+
 export const makeCollection = <Doc extends Record<string, any>>(
   collection_name: string
 ) =>
@@ -65,10 +67,17 @@ export const makeCollection = <Doc extends Record<string, any>>(
                 } as const;
               }).pipe(
                 Effect.catchAll((error) => {
-                  results.failures.push({
-                    index: i,
-                    error: error.toString()
-                  });
+                  if (error._tag === "ValidationError") {
+                    results.failures.push({
+                      index: i,
+                      error: error.message
+                    });
+                  } else {
+                    results.failures.push({
+                      index: i,
+                      error: error.toString()
+                    });
+                  }
                   return Effect.succeed(null);
                 })
               )
@@ -189,10 +198,17 @@ export const makeCollection = <Doc extends Record<string, any>>(
                 } as const;
               }).pipe(
                 Effect.catchAll((error) => {
-                  results.failures.push({
-                    index: i,
-                    error: error.toString()
-                  });
+                  if (error._tag === "ValidationError") {
+                    results.failures.push({
+                      index: i,
+                      error: error.message
+                    });
+                  } else {
+                    results.failures.push({
+                      index: i,
+                      error: error.toString()
+                    });
+                  }
                   return Effect.succeed(null);
                 })
               )
@@ -255,10 +271,14 @@ export const makeCollection = <Doc extends Record<string, any>>(
 
           return new_document;
         }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new DatabaseError({ message: "Failed to create document", cause })
-          )
+          Effect.catchTag("ValidationError", (e) => Effect.fail(e)),
+          Effect.mapError((cause) => {
+            if (cause._tag === "ValidationError") return cause;
+            return new DatabaseError({
+              message: "Failed to create document",
+              cause
+            });
+          })
         ),
 
       findById: storage.read,
@@ -292,13 +312,14 @@ export const makeCollection = <Doc extends Record<string, any>>(
 
           return new_document;
         }).pipe(
-          Effect.mapError(
-            (cause) =>
-              new DatabaseError({
-                message: `Failed to update document ${id}`,
-                cause
-              })
-          )
+          Effect.catchTag("ValidationError", (e) => Effect.fail(e)),
+          Effect.mapError((cause) => {
+            if (cause._tag === "ValidationError") return cause;
+            return new DatabaseError({
+              message: `Failed to update document ${id}`,
+              cause
+            });
+          })
         ),
 
       delete: (id: string) =>
