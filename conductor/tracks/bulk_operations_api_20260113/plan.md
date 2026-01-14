@@ -1,6 +1,6 @@
 # Implementation Plan - Bulk Operations API
 
-## Phase 1: API Scaffolding & Bulk Insertion
+## Phase 1: API Scaffolding & Bulk Insertion (Checkpoint: 36c9cc7)
 - [x] Task: Define Batch API Interfaces
     - [x] Sub-task: Create `BatchResult` and `BatchOperations` types in `src/types/collection.ts`.
     - [x] Sub-task: Update `Collection` interface to include the `batch` namespace.
