@@ -26,11 +26,11 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Bulk Deletion & Update' (Protocol in workflow.md) (56b8a2d)
 
 ## Phase 3: Validation & Performance
-- [ ] Task: Performance Benchmarking
-    - [ ] Sub-task: Create a benchmark test comparing 1000 single inserts vs 1 `batch.insert`.
-    - [ ] Sub-task: Ensure the performance gain is significant (>10x).
-- [ ] Task: Final Quality Gate
-    - [ ] Sub-task: Run `bun run lint`.
-    - [ ] Sub-task: Run `bun x tsc --noEmit`.
-    - [ ] Sub-task: Verify test coverage > 80% for new batch logic.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Validation & Performance' (Protocol in workflow.md)
+- [x] Task: Performance Benchmarking (36c9cc7)
+    - [x] Sub-task: Create a benchmark test comparing 1000 single inserts vs 1 `batch.insert`.
+    - [x] Sub-task: Ensure the performance gain is significant (>10x).
+- [x] Task: Final Quality Gate (84adf54)
+    - [x] Sub-task: Run `bun run lint`.
+    - [x] Sub-task: Run `bun x tsc --noEmit`.
+    - [x] Sub-task: Verify test coverage > 80% for new batch logic.
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Validation & Performance' (Protocol in workflow.md) (84adf54)

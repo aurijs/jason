@@ -74,8 +74,14 @@ export const makeCollection = <Doc extends Record<string, any>>(
               )
             );
 
-            const ops = yield* Effect.all(tasks, { concurrency: "unbounded" }).pipe(
-              Effect.map((results) => results.filter((op): op is NonNullable<typeof op> => op !== null))
+            const ops = yield* Effect.all(tasks, {
+              concurrency: "unbounded"
+            }).pipe(
+              Effect.map((results) =>
+                results.filter(
+                  (op): op is NonNullable<typeof op> => op !== null
+                )
+              )
             );
 
             if (ops.length > 0) {
@@ -129,9 +135,13 @@ export const makeCollection = <Doc extends Record<string, any>>(
               )
             );
 
-            const ops = yield* Effect.all(tasks, { concurrency: "unbounded" }).pipe(
+            const ops = yield* Effect.all(tasks, {
+              concurrency: "unbounded"
+            }).pipe(
               Effect.map((results) =>
-                results.filter((op): op is NonNullable<typeof op> => op !== null)
+                results.filter(
+                  (op): op is NonNullable<typeof op> => op !== null
+                )
               )
             );
 
@@ -188,9 +198,13 @@ export const makeCollection = <Doc extends Record<string, any>>(
               )
             );
 
-            const ops = yield* Effect.all(tasks, { concurrency: "unbounded" }).pipe(
+            const ops = yield* Effect.all(tasks, {
+              concurrency: "unbounded"
+            }).pipe(
               Effect.map((results) =>
-                results.filter((op): op is NonNullable<typeof op> => op !== null)
+                results.filter(
+                  (op): op is NonNullable<typeof op> => op !== null
+                )
               )
             );
 
