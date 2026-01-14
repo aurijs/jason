@@ -97,41 +97,43 @@ export const makeCollection = <Doc extends Record<string, any>>(
           Effect.gen(function* () {
             const docs_to_delete = yield* queryManager.find({ where: filter });
             const results: BatchResult = { success: 0, failures: [] };
-            const ops: any[] = [];
-            const tasks: Effect.Effect<void, never>[] = [];
 
-            for (let i = 0; i < docs_to_delete.length; i++) {
-              const doc = docs_to_delete[i];
-              const id = doc.id;
+            const tasks = docs_to_delete.map((doc, i) =>
+              Effect.gen(function* () {
+                const id = doc.id;
 
-              ops.push({
-                _tag: "DeleteOp",
-                collection: collection_name,
-                id
-              });
+                yield* storage.remove(id);
 
-              const post_write = Effect.all(
-                [
-                  storage.remove(id),
-                  metadataService.decrementCount,
-                  indexService.update(doc, undefined)
-                ],
-                { discard: true, concurrency: "unbounded" }
-              ).pipe(
-                Effect.match({
-                  onSuccess: () => {
-                    results.success++;
-                  },
-                  onFailure: (error) => {
-                    results.failures.push({
-                      id,
-                      error: error.toString()
-                    });
-                  }
+                yield* Effect.all(
+                  [
+                    metadataService.decrementCount,
+                    indexService.update(doc, undefined)
+                  ],
+                  { discard: true, concurrency: "unbounded" }
+                );
+
+                results.success++;
+                return {
+                  _tag: "DeleteOp",
+                  collection: collection_name,
+                  id
+                } as const;
+              }).pipe(
+                Effect.catchAll((error) => {
+                  results.failures.push({
+                    index: i,
+                    error: error.toString()
+                  });
+                  return Effect.succeed(null);
                 })
-              );
-              tasks.push(post_write);
-            }
+              )
+            );
+
+            const ops = yield* Effect.all(tasks, { concurrency: "unbounded" }).pipe(
+              Effect.map((results) =>
+                results.filter((op): op is NonNullable<typeof op> => op !== null)
+              )
+            );
 
             if (ops.length > 0) {
               yield* wal.log({
@@ -139,8 +141,6 @@ export const makeCollection = <Doc extends Record<string, any>>(
                 collection: collection_name,
                 operations: ops
               } as any);
-
-              yield* Effect.all(tasks, { concurrency: "unbounded" });
             }
 
             return results;
@@ -154,43 +154,45 @@ export const makeCollection = <Doc extends Record<string, any>>(
           Effect.gen(function* () {
             const docs_to_update = yield* queryManager.find({ where: filter });
             const results: BatchResult = { success: 0, failures: [] };
-            const ops: any[] = [];
-            const tasks: Effect.Effect<void, never>[] = [];
 
-            for (let i = 0; i < docs_to_update.length; i++) {
-              const old_document = docs_to_update[i];
-              const id = old_document.id;
-              const new_document = { ...old_document, ...data } as Doc;
+            const tasks = docs_to_update.map((old_document, i) =>
+              Effect.gen(function* () {
+                const id = old_document.id;
+                const new_document = { ...old_document, ...data } as Doc;
 
-              ops.push({
-                _tag: "UpdateOp",
-                collection: collection_name,
-                id,
-                data
-              });
+                yield* storage.write(id, new_document);
 
-              const post_write = Effect.all(
-                [
-                  storage.write(id, new_document),
-                  metadataService.touch,
-                  indexService.update(old_document, new_document)
-                ],
-                { discard: true, concurrency: "unbounded" }
-              ).pipe(
-                Effect.match({
-                  onSuccess: () => {
-                    results.success++;
-                  },
-                  onFailure: (error) => {
-                    results.failures.push({
-                      id,
-                      error: error.toString()
-                    });
-                  }
+                yield* Effect.all(
+                  [
+                    metadataService.touch,
+                    indexService.update(old_document, new_document)
+                  ],
+                  { discard: true, concurrency: "unbounded" }
+                );
+
+                results.success++;
+                return {
+                  _tag: "UpdateOp",
+                  collection: collection_name,
+                  id,
+                  data
+                } as const;
+              }).pipe(
+                Effect.catchAll((error) => {
+                  results.failures.push({
+                    index: i,
+                    error: error.toString()
+                  });
+                  return Effect.succeed(null);
                 })
-              );
-              tasks.push(post_write);
-            }
+              )
+            );
+
+            const ops = yield* Effect.all(tasks, { concurrency: "unbounded" }).pipe(
+              Effect.map((results) =>
+                results.filter((op): op is NonNullable<typeof op> => op !== null)
+              )
+            );
 
             if (ops.length > 0) {
               yield* wal.log({
@@ -198,8 +200,6 @@ export const makeCollection = <Doc extends Record<string, any>>(
                 collection: collection_name,
                 operations: ops
               } as any);
-
-              yield* Effect.all(tasks, { concurrency: "unbounded" });
             }
 
             return results;

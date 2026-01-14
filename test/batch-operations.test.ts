@@ -121,4 +121,116 @@ describe("Batch Operations", () => {
 
     await Effect.runPromise(program);
   });
+
+  it("batch.delete with a filter removes multiple documents", async () => {
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        
+        const config = {
+          base_path: tempDir,
+          collections: {
+            users: UserSchema
+          }
+        };
+
+        const BaseLayer = Layer.mergeAll(
+            Json.Default,
+            ConfigManager.Default(config),
+            BunContext.layer
+        );
+
+        const ServiceLayer = Layer.mergeAll(
+            JsonFile.Default,
+            WriteAheadLog.Default
+        );
+
+        const TestLayer = ServiceLayer.pipe(
+            Layer.provide(BaseLayer),
+            Layer.merge(BaseLayer)
+        );
+
+        return yield* Effect.gen(function* () {
+          const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
+          
+          // Seed data
+          yield* collection.batch.insert([
+            { id: "user-1", name: "Alice", email: "alice@example.com" },
+            { id: "user-2", name: "Bob", email: "bob@example.com" },
+            { id: "user-3", name: "Charlie", email: "charlie@example.com" },
+            { id: "user-4", name: "Alice", email: "alice2@example.com" }
+          ]);
+
+          // Delete all Alice
+          const result = yield* collection.batch.delete({ name: "Alice" });
+
+          expect(result.success).toBe(2);
+          expect(result.failures).toHaveLength(0);
+
+          const count = yield* collection.count;
+          expect(count).toBe(2);
+
+          const remaining = yield* collection.find({ where: { name: "Alice" } });
+          expect(remaining).toHaveLength(0);
+        }).pipe(Effect.provide(TestLayer));
+      })
+    ).pipe(Effect.provide(BunContext.layer));
+
+    await Effect.runPromise(program);
+  });
+
+  it("batch.update with a filter modifies multiple documents", async () => {
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const tempDir = yield* fs.makeTempDirectoryScoped();
+        
+        const config = {
+          base_path: tempDir,
+          collections: {
+            users: UserSchema
+          }
+        };
+
+        const BaseLayer = Layer.mergeAll(
+            Json.Default,
+            ConfigManager.Default(config),
+            BunContext.layer
+        );
+
+        const ServiceLayer = Layer.mergeAll(
+            JsonFile.Default,
+            WriteAheadLog.Default
+        );
+
+        const TestLayer = ServiceLayer.pipe(
+            Layer.provide(BaseLayer),
+            Layer.merge(BaseLayer)
+        );
+
+        return yield* Effect.gen(function* () {
+          const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
+          
+          // Seed data
+          yield* collection.batch.insert([
+            { id: "user-1", name: "Alice", email: "alice@example.com" },
+            { id: "user-2", name: "Bob", email: "bob@example.com" },
+            { id: "user-3", name: "Charlie", email: "charlie@example.com" }
+          ]);
+
+          // Update all
+          const result = yield* collection.batch.update({}, { name: "Updated Name" });
+
+          expect(result.success).toBe(3);
+          expect(result.failures).toHaveLength(0);
+
+          const updated = yield* collection.find({ where: { name: "Updated Name" } });
+          expect(updated).toHaveLength(3);
+        }).pipe(Effect.provide(TestLayer));
+      })
+    ).pipe(Effect.provide(BunContext.layer));
+
+    await Effect.runPromise(program);
+  });
 });
