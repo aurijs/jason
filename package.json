@@ -56,6 +56,7 @@
     "lightweight"
   ],
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
     "@effect/platform": "^0.90.10",
     "@effect/platform-node": "^0.96.1",
     "@types/bun": "latest",
@@ -65,7 +66,8 @@
     "effect": "^3.18.4",
     "oxlint": "^1.21.0",
     "tsup": "^8.5.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zod": "^4.3.5"
   },
   "peerDependencies": {
     "typescript": "^5.9.2"
