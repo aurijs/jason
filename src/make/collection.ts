@@ -41,50 +41,50 @@ export const makeCollection = <Doc extends Record<string, any>>(
         insert: (docs: Doc[]) =>
           Effect.gen(function* () {
             const results: BatchResult = { success: 0, failures: [] };
-            const ops: any[] = [];
-            const tasks: Effect.Effect<void, never>[] = [];
 
-            for (let i = 0; i < docs.length; i++) {
-              const data = docs[i];
-              const id = (data.id as string) ?? crypto.randomUUID();
-              const new_document = { ...data, id } as Doc;
+            const tasks = docs.map((data, i) =>
+              Effect.gen(function* () {
+                const id = (data.id as string) ?? crypto.randomUUID();
+                const new_document = { ...data, id } as Doc;
 
-              ops.push({
-                _tag: "CreateOp",
-                collection: collection_name,
-                data: new_document
-              });
+                yield* storage.write(id, new_document);
 
-              const post_write = Effect.all(
-                [
-                  storage.write(id, new_document),
-                  metadataService.incrementCount,
-                  indexService.update(undefined, new_document)
-                ],
-                { discard: true, concurrency: "unbounded" }
-              ).pipe(
-                Effect.match({
-                  onSuccess: () => {
-                    results.success++;
-                  },
-                  onFailure: (error) => {
-                    results.failures.push({
-                      index: i,
-                      error: error.toString()
-                    });
-                  }
+                yield* Effect.all(
+                  [
+                    metadataService.incrementCount,
+                    indexService.update(undefined, new_document)
+                  ],
+                  { discard: true, concurrency: "unbounded" }
+                );
+
+                results.success++;
+                return {
+                  _tag: "CreateOp",
+                  collection: collection_name,
+                  data: new_document
+                } as const;
+              }).pipe(
+                Effect.catchAll((error) => {
+                  results.failures.push({
+                    index: i,
+                    error: error.toString()
+                  });
+                  return Effect.succeed(null);
                 })
-              );
-              tasks.push(post_write);
+              )
+            );
+
+            const ops = yield* Effect.all(tasks, { concurrency: "unbounded" }).pipe(
+              Effect.map((results) => results.filter((op): op is NonNullable<typeof op> => op !== null))
+            );
+
+            if (ops.length > 0) {
+              yield* wal.log({
+                _tag: "BatchOp",
+                collection: collection_name,
+                operations: ops
+              });
             }
-
-            yield* wal.log({
-              _tag: "BatchOp",
-              collection: collection_name,
-              operations: ops
-            } as any);
-
-            yield* Effect.all(tasks, { concurrency: "unbounded" });
 
             return results;
           }).pipe(

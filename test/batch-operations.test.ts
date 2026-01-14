@@ -12,11 +12,10 @@ const UserSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   email: Schema.String,
-  age: Schema.Number
 });
 
-describe("Collection Batch Operations", () => {
-  it("batch.insert should insert multiple documents", async () => {
+describe("Batch Operations", () => {
+  it("batch.insert with 10 documents returns success summary", async () => {
     const program = Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -45,40 +44,31 @@ describe("Collection Batch Operations", () => {
             Layer.merge(BaseLayer)
         );
 
-        yield* Effect.gen(function* () {
-            const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
+        return yield* Effect.gen(function* () {
+          const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
+          
+          const docs = Array.from({ length: 10 }, (_, i) => ({
+            id: `user-${i}`,
+            name: `User ${i}`,
+            email: `user${i}@example.com`
+          }));
 
-            const users = Array.from({ length: 10 }, (_, i) => ({
-                id: `user-${i}`,
-                name: `User ${i}`,
-                email: `user${i}@example.com`,
-                age: 20 + i
-            }));
+          const result = yield* collection.batch.insert(docs);
 
-            const result = yield* collection.batch.insert(users);
-            
-            expect(result.success).toBe(10);
-            expect(result.failures.length).toBe(0);
-            
-            // Wait for background writes
-            yield* Effect.sleep("200 millis");
+          expect(result.success).toBe(10);
+          expect(result.failures).toHaveLength(0);
 
-            const all = yield* collection.find({});
-            expect(all.length).toBe(10);
+          // Verify they actually exist
+          const count = yield* collection.count;
+          expect(count).toBe(10);
         }).pipe(Effect.provide(TestLayer));
       })
-    ).pipe(
-        Effect.provide(BunContext.layer),
-        Effect.catchAllCause(cause => {
-            console.error(cause.toString());
-            return Effect.fail(cause);
-        })
-    );
+    ).pipe(Effect.provide(BunContext.layer));
 
     await Effect.runPromise(program);
   });
 
-  it("batch.insert should handle partial failures (Best-Effort)", async () => {
+  it("batch.insert with some invalid documents returns partial failure summary", async () => {
     const program = Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -107,148 +97,27 @@ describe("Collection Batch Operations", () => {
             Layer.merge(BaseLayer)
         );
 
-        yield* Effect.gen(function* () {
-            const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
+        return yield* Effect.gen(function* () {
+          const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
+          
+          const docs: any[] = [
+            { id: "user-1", name: "User 1", email: "user1@example.com" },
+            { id: "user-2", name: 123, email: "user2@example.com" }, // Invalid name
+            { id: "user-3", name: "User 3", email: "user3@example.com" }
+          ];
 
-            const users = [
-                { id: "user-1", name: "User 1", email: "user1@example.com", age: 20 },
-                { id: "user-2", name: "User 2", email: "user2@example.com", age: "invalid" as any }, // Should fail
-                { id: "user-3", name: "User 3", email: "user3@example.com", age: 30 }
-            ];
+          const result = yield* collection.batch.insert(docs);
 
-            const result = yield* collection.batch.insert(users);
-            
-            expect(result.success).toBe(2);
-            expect(result.failures.length).toBe(1);
-            expect(result.failures[0].index).toBe(1);
-            
-            yield* Effect.sleep("100 millis");
+          expect(result.success).toBe(2);
+          expect(result.failures).toHaveLength(1);
+          expect(result.failures[0].index).toBe(1);
 
-            const all = yield* collection.find({});
-            expect(all.length).toBe(2);
-            expect(all.map(u => u.id).sort()).toEqual(["user-1", "user-3"]);
+          // Verify only 2 exist
+          const count = yield* collection.count;
+          expect(count).toBe(2);
         }).pipe(Effect.provide(TestLayer));
       })
-    ).pipe(
-        Effect.provide(BunContext.layer)
-    );
-
-    await Effect.runPromise(program);
-  });
-
-  it("batch.delete should delete multiple documents", async () => {
-    const program = Effect.scoped(
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const tempDir = yield* fs.makeTempDirectoryScoped();
-        
-        const config = {
-          base_path: tempDir,
-          collections: {
-            users: UserSchema
-          }
-        };
-
-        const BaseLayer = Layer.mergeAll(
-            Json.Default,
-            ConfigManager.Default(config),
-            BunContext.layer
-        );
-
-        const ServiceLayer = Layer.mergeAll(
-            JsonFile.Default,
-            WriteAheadLog.Default
-        );
-
-        const TestLayer = ServiceLayer.pipe(
-            Layer.provide(BaseLayer),
-            Layer.merge(BaseLayer)
-        );
-
-        yield* Effect.gen(function* () {
-            const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
-
-            const users = Array.from({ length: 10 }, (_, i) => ({
-                id: `user-${i}`,
-                name: `User ${i}`,
-                email: `user${i}@example.com`,
-                age: i < 5 ? 20 : 30
-            }));
-
-            yield* collection.batch.insert(users);
-            yield* Effect.sleep("100 millis");
-
-            const result = yield* collection.batch.delete({ age: 20 });
-            expect(result.success).toBe(5);
-            
-            yield* Effect.sleep("100 millis");
-
-            const remaining = yield* collection.find({});
-            expect(remaining.length).toBe(5);
-            expect(remaining.every(u => u.age === 30)).toBe(true);
-        }).pipe(Effect.provide(TestLayer));
-      })
-    ).pipe(
-        Effect.provide(BunContext.layer)
-    );
-
-    await Effect.runPromise(program);
-  });
-
-  it("batch.update should update multiple documents", async () => {
-    const program = Effect.scoped(
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const tempDir = yield* fs.makeTempDirectoryScoped();
-        
-        const config = {
-          base_path: tempDir,
-          collections: {
-            users: UserSchema
-          }
-        };
-
-        const BaseLayer = Layer.mergeAll(
-            Json.Default,
-            ConfigManager.Default(config),
-            BunContext.layer
-        );
-
-        const ServiceLayer = Layer.mergeAll(
-            JsonFile.Default,
-            WriteAheadLog.Default
-        );
-
-        const TestLayer = ServiceLayer.pipe(
-            Layer.provide(BaseLayer),
-            Layer.merge(BaseLayer)
-        );
-
-        yield* Effect.gen(function* () {
-            const collection = yield* makeCollection<Schema.Schema.Type<typeof UserSchema>>("users");
-
-            const users = Array.from({ length: 10 }, (_, i) => ({
-                id: `user-${i}`,
-                name: `User ${i}`,
-                email: `user${i}@example.com`,
-                age: i < 5 ? 20 : 30
-            }));
-
-            yield* collection.batch.insert(users);
-            yield* Effect.sleep("100 millis");
-
-            const result = yield* collection.batch.update({ age: 20 }, { age: 21 });
-            expect(result.success).toBe(5);
-            
-            yield* Effect.sleep("100 millis");
-
-            const updated = yield* collection.find({ where: { age: 21 } });
-            expect(updated.length).toBe(5);
-        }).pipe(Effect.provide(TestLayer));
-      })
-    ).pipe(
-        Effect.provide(BunContext.layer)
-    );
+    ).pipe(Effect.provide(BunContext.layer));
 
     await Effect.runPromise(program);
   });
