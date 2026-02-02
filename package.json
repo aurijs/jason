@@ -1,18 +1,20 @@
 {
   "name": "@aurios/jason",
   "description": "A simple, lightweight, and embeddable JSON document database built on Bun.",
-  "version": "1.6.6",
+  "version": "3.0.2",
   "scripts": {
-    "build": "bun run tsc",
-    "test": "vitest",
-    "lint": "biome check src --apply",
+    "build": "tsup",
+    "test": "vitest run",
+    "lint": "oxlint src && prettier --check src",
+    "format": "prettier --write src",
     "test:watch": "vitest watch",
     "test:coverage": "vitest --coverage",
     "clean": "rm -rf dist",
     "prebuild": "bun run clean",
     "publish": "npm publish",
     "prepublish": "bun run build",
-    "version": "conventional-changelog -p jquery -i CHANGELOG.md -s"
+    "version": "conventional-changelog -p jquery -i CHANGELOG.md -s",
+    "circular": "bun run scripts/circular.js"
   },
   "exports": {
     ".": {
@@ -54,13 +56,29 @@
     "lightweight"
   ],
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "@effect/platform": "^0.90.10",
+    "@effect/platform-node": "^0.96.1",
     "@types/bun": "latest",
     "@vitest/coverage-v8": "2.1.9",
     "async-mutex": "^0.5.0",
-    "devalue": "^5.1.1",
-    "vitest": "^3.0.7"
+    "devalue": "^5.6.1",
+    "effect": "^3.19.14",
+    "oxlint": "^1.39.0",
+    "tsup": "^8.5.1",
+    "vitest": "^3.2.4",
+    "zod": "^4.3.5"
   },
   "peerDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@effect/language-service": "^0.41.1",
+    "@effect/platform-bun": "^0.79.1",
+    "@prettier/plugin-oxc": "^0.0.4",
+    "@types/madge": "^5.0.3",
+    "eslint": "^9.39.2",
+    "madge": "^8.0.0",
+    "prettier": "^3.7.4"
   }
 }

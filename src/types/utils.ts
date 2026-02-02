@@ -1,6 +1,3 @@
-/**
- * Represents a validation function type.
- *
- * @template T The type of data being validated.
- */
-export type ValidationFunction<T> = (item: T) => boolean;
+export type Mutable<T> = {
+  -readonly [P in keyof T]: T[P];
+};

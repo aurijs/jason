@@ -1,1 +1,2 @@
-export { default as JasonDB } from "./core/main.js";
+export { createJasonDB, createJasonDBLayer, JasonDB } from "./core/main.js";
+export * from "./types/query.js";

@@ -1,36 +1,124 @@
-export class MetadataPersistenceError extends Error {
-	constructor(message: string, originalError?: Error) {
-		super(message);
-		this.name = "MetadataPersistenceError";
-		if (originalError) {
-			this.stack += `\nCaused by: ${originalError.stack}`;
-		}
-	}
-}
+import { Schema } from "effect";
 
-export class DocumentNotFoundError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "DocumentNotFoundError";
-	}
-}
+export class WalWriteError extends Schema.TaggedError<WalWriteError>()(
+  "WalWriteError",
+  {
+    reason: Schema.Union(
+      Schema.Literal("SerializationError"),
+      Schema.Literal("FileSystemError")
+    ),
+    cause: Schema.Unknown
+  }
+) {}
 
-export class DeleteOperationError extends Error {
-	originalError: unknown;
+export class WalReplayError extends Schema.TaggedError<WalReplayError>()(
+  "WalReplayError",
+  {
+    reason: Schema.Union(
+      Schema.Literal("DirectoryReadError"),
+      Schema.Literal("FileReadError"),
+      Schema.Literal("ParseError")
+    ),
+    cause: Schema.Unknown
+  }
+) {}
 
-	constructor(message: string, originalError?: unknown) {
-		super(message);
-		this.name = "DeleteOperationError";
-		this.originalError = originalError;
-	}
-}
+export class WalCheckpointError extends Schema.TaggedError<WalCheckpointError>()(
+  "WalCheckpointError",
+  {
+    reason: Schema.Union(
+      Schema.Literal("DirectoryReadError"),
+      Schema.Literal("FileRemoveError")
+    ),
+    cause: Schema.Unknown
+  }
+) {}
 
-export class QueryOperationError extends Error {
-	originalError: unknown;
+export class WalInitializationError extends Schema.TaggedError<WalInitializationError>()(
+  "WalInitializationError",
+  {
+    reason: Schema.Union(
+      Schema.Literal("DirectoryCreationError"),
+      Schema.Literal("DirectoryReadError")
+    ),
+    cause: Schema.Unknown
+  }
+) {}
 
-	constructor(message: string, originalError?: unknown) {
-		super(message);
-		this.name = "QueryOperationError";
-		this.originalError = originalError;
-	}
-}
+export class DatabaseError extends Schema.TaggedError<DatabaseError>()(
+  "DatabaseError",
+  {
+    message: Schema.String,
+    cause: Schema.Unknown
+  }
+) {}
+
+export class JsonFileError extends Schema.TaggedError<JsonFileError>()(
+  "JsonFileError",
+  {
+    message: Schema.String,
+    cause: Schema.Unknown
+  }
+) {}
+
+export class MetadataPersistenceError extends Schema.TaggedError<MetadataPersistenceError>()(
+  "MetadataPersistenceError",
+  {
+    message: Schema.String,
+    cause: Schema.Unknown
+  }
+) {}
+
+export class DocumentNotFoundError extends Schema.TaggedError<DocumentNotFoundError>()(
+  "DocumentNotFoundError",
+  {
+    message: Schema.String,
+    cause: Schema.Unknown
+  }
+) {}
+
+export class DeleteOperationError extends Schema.TaggedError<DeleteOperationError>()(
+  "DeleteOperationError",
+  {
+    message: Schema.String,
+    cause: Schema.Unknown
+  }
+) {}
+
+export class QueryOperationError extends Schema.TaggedError<QueryOperationError>()(
+  "QueryOperationError",
+  {
+    message: Schema.String,
+    cause: Schema.Unknown
+  }
+) {}
+
+export class JsonError extends Schema.TaggedError<JsonError>()("JsonError", {
+  message: Schema.String,
+  cause: Schema.Unknown
+}) {}
+
+export class ValidationError extends Schema.TaggedError<ValidationError>()(
+  "ValidationError",
+  {
+    message: Schema.String,
+    issues: Schema.Array(Schema.Any)
+  }
+) {}
+
+export const CoreError = Schema.Union(
+  WalWriteError,
+  WalReplayError,
+  WalCheckpointError,
+  WalInitializationError,
+  DatabaseError,
+  JsonFileError,
+  MetadataPersistenceError,
+  DocumentNotFoundError,
+  DeleteOperationError,
+  QueryOperationError,
+  JsonError,
+  ValidationError
+);
+
+export type CoreError = Schema.Schema.Type<typeof CoreError>;

@@ -1,108 +1,236 @@
-import { access, mkdir, readdir } from "node:fs/promises";
-import path from "node:path";
-import Collection from "../data/collection.js";
+import { FileSystem, Path } from "@effect/platform";
+import { NodeContext } from "@effect/platform-node";
+import {
+  Context,
+  Effect,
+  Exit,
+  GroupBy,
+  Layer,
+  Ref,
+  Runtime,
+  type Schema,
+  Scope,
+  Stream
+} from "effect";
+import { ConfigManager } from "../layers/config.js";
+import { JsonFile } from "../layers/json-file.js";
+import { Json } from "../layers/json.js";
+import { WriteAheadLog } from "../layers/wal.js";
+import { makeCollection } from "../make/collection.js";
+import { makeStorageManager } from "../make/storage-manager.js";
 import type {
-  CollectionOptions,
-  Document,
-  JasonDBOptions,
-} from "../types/index.js";
+  Collection,
+  InferCollections,
+  JasonDBConfig
+} from "../types/collection.js";
+import type { Database, DatabaseEffect } from "../types/database.js";
+import type { SchemaOrString } from "../types/schema.js";
 
-export default class JasonDB<T> {
-  #basePath: string;
-  #collections = new Map<keyof T, Collection<T, keyof T>>();
+export class JasonDB extends Context.Tag("DatabaseService")<
+  JasonDB,
+  DatabaseEffect<any>
+>() {}
 
-  /**
-   * Creates a new JasonDB instance with the given configuration.
-   * @param options - Either a string representing the database name (will be created in current working directory),
-   *                 or a JasonDBOptions configuration object
-   * @example
-   * // Simple usage
-   * const db = new JasonDB('my-database');
-   * 
-   * // Advanced usage
-   * const db = new JasonDB({
-   *   basename: 'my-database',
-   *   path: './custom-location'
-   * });
-   */
-  constructor(options: string | JasonDBOptions) {
-    if (typeof options === "string") {
-      const cwd = path.resolve(".");
-      this.#basePath = path.join(cwd, options);
-    } else {
-		const cwd = path.resolve(options.path);
-    this.#basePath = path.join(cwd, options.basename);
-	}
+const makeJasonDB = <const T extends Record<string, SchemaOrString>>(
+  config: JasonDBConfig<T>
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const wal = yield* WriteAheadLog;
 
-    this.#ensureDataDirExists();
-  }
+    const storage_managers = new Map<
+      string,
+      Effect.Effect.Success<ReturnType<typeof makeStorageManager>>
+    >();
 
-  async #ensureDataDirExists() {
-    try {
-      await access(this.#basePath);
-    } catch {
-      await mkdir(this.#basePath, { recursive: true });
-    }
-  }
-
-  /**
-   * Retrieves or creates a collection in the database.
-   *
-   * If a collection with the given name does not exist, it initializes a new collection
-   * with the provided options and stores it. If the collection already exists, it returns the existing one.
-   *
-   * @param name - The name of the collection.
-   * @param options - Optional settings for the collection.
-   * @param options.initialData - An array of initial data to populate the collection.
-   * @param options.schema - A validation function for the collection's documents.
-   * @param options.concurrencyStrategy - The concurrency strategy to use for the collection.
-   * @param options.cacheTimeout - The cache timeout in milliseconds.
-   * @param options.generateMetadata - Whether to generate metadata for the collection.
-   * @param options.indices - An optional string of index definitions for the collection (e.g., ['++id', '&email', '*tags']).
-   * @returns The collection instance associated with the given name.
-   */
-  collection<K extends keyof T>(
-    name: K,
-    options: CollectionOptions<Document<T, K>> = {}
-  ): Collection<T, K> {
-    const existingCollection = this.#collections.get(name);
-
-    if (existingCollection) {
-      return existingCollection as Collection<T, K>;
-    }
-
-    const newCollection = new Collection<T, K>(this.#basePath, name, options);
-
-    this.#collections.set(name, newCollection);
-
-    return newCollection;
-  }
-
-  /**
-   * Lists all collections in the database.
-   *
-   * Reads the base directory and returns the names of all subdirectories,
-   * which represent the collections.
-   *
-   * @returns A promise that resolves to an array of collection names.
-   * If an error occurs, it resolves to an empty array.
-   */
-  async listCollections(): Promise<(keyof T)[]> {
-    try {
-      if (this.#collections.size > 0)
-        return Array.from(this.#collections.keys());
-
-      const entries = await readdir(this.#basePath, { withFileTypes: true });
-      return entries
-        .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
-        .map((entry) => entry.name) as (keyof T)[];
-    } catch (error) {
-      console.error("Failed to list collections", {
-        path: this.#basePath,
-        error: error instanceof Error ? error.message : "Unknown error",
+    const getStorageManager = (collectionName: string) =>
+      Effect.gen(function* () {
+        if (storage_managers.has(collectionName)) {
+          return storage_managers.get(collectionName)!;
+        }
+        const storageManager = yield* makeStorageManager<any>(collectionName);
+        storage_managers.set(collectionName, storageManager);
+        return storageManager;
       });
 
-      return [];
+    const last_segment = yield* Ref.make(0);
+
+    const replay_effect = wal.replay.pipe(
+      Stream.flatMap(({ op, segment, position }) =>
+        op._tag === "BatchOp"
+          ? Stream.fromIterable(
+              op.operations.map((innerOp) => ({
+                op: innerOp,
+                segment,
+                position
+              }))
+            )
+          : Stream.make({ op, segment, position })
+      ),
+      Stream.tap(({ segment }) => Ref.set(last_segment, Math.max(segment, 0))),
+      Stream.groupByKey(
+        ({ op }) =>
+          `${op.collection}/${op._tag === "CreateOp" ? op.data.id : (op as any).id}`,
+        { bufferSize: 8192 }
+      ),
+      (grouped_stream) =>
+        GroupBy.evaluate(grouped_stream, (_key, stream) =>
+          Stream.fromEffect(
+            Stream.runForEach(stream, ({ op }) =>
+              Effect.gen(function* () {
+                const storage = yield* getStorageManager(op.collection);
+
+                switch (op._tag) {
+                  case "CreateOp": {
+                    return yield* storage.write(op.data.id as string, op.data);
+                  }
+                  case "UpdateOp": {
+                    return yield* storage.read(op.id).pipe(
+                      Effect.flatMap((doc) =>
+                        doc
+                          ? storage.write(op.id, { ...doc, ...op.data })
+                          : Effect.void
+                      ),
+                      Effect.catchTag("SystemError", () => Effect.void)
+                    );
+                  }
+                  case "DeleteOp": {
+                    return yield* storage
+                      .remove(op.id)
+                      .pipe(Effect.catchTag("SystemError", () => Effect.void));
+                  }
+                }
+              })
+            )
+          )
+        ),
+      Stream.runDrain
+    );
+
+    yield* replay_effect;
+
+    const final_last_segment = yield* Ref.get(last_segment);
+    if (final_last_segment > 0) {
+      yield* wal.checkpoint(final_last_segment);
     }
-  }
+
+    const collection_names = config.collections
+      ? Object.keys(config.collections)
+      : [];
+    const base_path = config.base_path;
+
+    yield* fs.makeDirectory(base_path, { recursive: true });
+
+    const collection_services = yield* Effect.all(
+      Object.fromEntries(
+        collection_names.map((name) => [name, makeCollection(name)])
+      )
+    );
+
+    type CollectionsSchema = {
+      [K in keyof T]: T[K] extends Schema.Schema<any, infer A> ? A : any;
+    };
+
+    const database_service: DatabaseEffect<CollectionsSchema> = {
+      collections: collection_services as any
+    };
+
+    return database_service;
+  });
+
+export const createJasonDBLayer = <
+  const T extends Record<string, SchemaOrString>
+>(
+  config: JasonDBConfig<T>
+) => {
+  const ConfigLayer = ConfigManager.Default(config);
+
+  const BaseInfraLayer = Layer.mergeAll(
+    JsonFile.Default,
+    Json.Default,
+    WriteAheadLog.Default
+  );
+
+  const AppLayer = Layer.scoped(JasonDB, makeJasonDB<T>(config));
+
+  const FullInfraLayer = Layer.provideMerge(BaseInfraLayer, ConfigLayer);
+
+  return AppLayer.pipe(Layer.provide(FullInfraLayer));
+};
+
+/**
+ * Creates a Promise client from an Effect service.
+ *
+ * @param effect_service A Record of functions that return Effects or nested objects of such functions.
+ * @param run A function that takes an Effect and returns a Promise of the Effect's result.
+ * @returns A Record where each key is a function that returns a Promise or a nested object.
+ */
+function createPromiseClient(
+  effect_service: any,
+  run: (effect: Effect.Effect<any, any, any>) => Promise<any>
+) {
+  const promise_client = {} as any;
+
+  Object.keys(effect_service).forEach((key) => {
+    const prop = effect_service[key];
+
+    if (typeof prop === "function") {
+      promise_client[key] = (...args: any[]) => run(prop(...args));
+    } else if (
+      typeof prop === "object" &&
+      prop !== null &&
+      !Effect.isEffect(prop)
+    ) {
+      promise_client[key] = createPromiseClient(prop, run);
+    }
+  });
+
+  return promise_client;
 }
+
+/**
+ * Creates a JasonDB instance based on the provided configuration.
+ *
+ * @param config - The configuration object for the JasonDB instance.
+ * @returns A Promise that resolves to a Database instance with collections defined in the config.
+ */
+export const createJasonDB = async <
+  const T extends Record<string, SchemaOrString>
+>(
+  config: JasonDBConfig<T>
+): Promise<Database<InferCollections<T>>> => {
+  const layer = createJasonDBLayer(config).pipe(
+    Layer.provide(NodeContext.layer)
+  );
+  const scope = await Effect.runPromise(Scope.make());
+  const context = await Effect.runPromise(
+    Layer.buildWithScope(layer, scope) as any
+  );
+
+  const context_with_scope = Context.add(context as any, Scope.Scope, scope);
+  const runtime = Runtime.make({
+    ...Runtime.defaultRuntime,
+    context: context_with_scope
+  });
+  const run = Runtime.runPromise(runtime);
+
+  const effect_base_db = await run(JasonDB);
+
+  const promise_based_collection = {} as {
+    [K in keyof InferCollections<T>]: Collection<InferCollections<T>[K]>;
+  };
+
+  for (const name in effect_base_db.collections) {
+    const effect_based_collection = effect_base_db.collections[name];
+
+    promise_based_collection[name as keyof typeof promise_based_collection] =
+      createPromiseClient(effect_based_collection, run);
+  }
+
+  return {
+    collections: promise_based_collection,
+    [Symbol.asyncDispose]: async () => {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+    }
+  };
+};

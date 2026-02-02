@@ -31,7 +31,7 @@ jason is the perfect solution when you need a fast and easy-to-use JSON database
 ## 🚀 Installation
 
 ```sh
-bun add -D jason
+bun add @aurios/jason
 
 # or
 
@@ -41,65 +41,144 @@ npm i @aurios/jason
 ## 💻 Quick Example
 
 ```typescript
-import JasonDB from "jason";
-
-// Define your interfaces
-interface User {
-  name: string;
-  email: string;
-}
-
-interface Database {
-  users: User[];
-}
+import { createJasonDB, gte } from "@aurios/jason";
 
 // Initialize the database
-const db = new JasonDB<Database>("my-db");
-
-// Create a collection
-const users = await db.collection("users", {
-  schema: (user) => user.name && user.email.includes("@"),
+const db = await createJasonDB({
+  base_path: "./my-db",
+  collections: {
+    // Define schema using the simple string syntax
+    users: "name;email;age:number;isActive:boolean"
+  }
 });
 
-// Use the simple API
+const { users } = db.collections;
+
+// Create a document
 await users.create({
   name: "John Smith",
   email: "john@example.com",
+  age: 30,
+  isActive: true
+});
+
+// Find documents using helper functions
+const adults = await users.find({
+  where: {
+    age: gte(18)
+  }
 });
 ```
 
 ## 🛠️ Core API
 
-### 📦 JasonDB
+### 📦 Initialization
+
+Use `createJasonDB` to initialize your database instance. You define your collections and their schemas in the configuration.
 
 ```typescript
-// Create an instance
-const db = new JasonDB("my-database");
-
-// Access collections
-const myCollection = db.collection("name");
-
-// List collections
-const collections = await db.listCollections();
+const db = await createJasonDB({
+  base_path: "./data", // Directory to store data
+  collections: {
+    // String syntax: "field1;field2:type;..."
+    posts: "@id;title;content;published:boolean;*tags"
+    // You can also use Effect Schema objects if preferred
+    // users: Schema.Struct({ ... })
+  }
+});
 ```
 
-### 📑 Collections
+### 📝 Schema String Syntax
+
+The string syntax provides a shorthand for defining fields and indexes:
+
+- **Format**: `name:type` (type defaults to string if omitted)
+- **Types**: `string`, `number`, `boolean`, `date`, `array<T>`, `record<K,V>`
+- **Modifiers**:
+  - `@id`: UUID Primary Key
+  - `++id`: Auto-increment Primary Key
+  - `&name`: Unique Index
+  - `*tags`: Multi-entry Index (for arrays)
+  - `[a+b]`: Compound Index
+
+### 📑 Collection Operations
+
+Access collections via `db.collections.<name>`.
 
 ```typescript
-// Create
-const doc = await collection.create({ ... });
+const collection = db.collections.posts;
 
-// Read
-const item = await collection.read("id");
+// Create
+const post = await collection.create({
+  title: "Hello World",
+  tags: ["news", "tech"]
+});
+
+// Read (by ID)
+const item = await collection.findById(post.id);
 
 // Update
-await collection.update("id", { field: "new value" });
+await collection.update(post.id, { title: "Updated Title" });
 
 // Delete
-await collection.delete("id");
+await collection.delete(post.id);
 
-// Query
-const results = await collection.query(doc => doc.age > 18);
+// Check existence
+const exists = await collection.has(post.id);
+```
+
+### 🔍 Querying
+
+JasonDB provides a rich set of query helpers for filtering data.
+
+```typescript
+import { gt, startsWith, and, or } from "@aurios/jason";
+
+// Simple equality
+const results = await collection.find({
+  where: { published: true }
+});
+
+// Comparison operators
+const recent = await collection.find({
+  where: {
+    views: gt(100),
+    title: startsWith("How to")
+  },
+  order_by: { field: "createdAt", order: "desc" },
+  limit: 10
+});
+
+// Logical operators
+const complex = await collection.find({
+  where: or({ category: "tech" }, { views: gt(1000) })
+});
+```
+
+### 📦 Batch Operations
+
+Perform bulk actions efficiently using the `batch` API.
+
+```typescript
+// Batch Insert
+await collection.batch.insert([
+  { name: "Doc 1", value: 10 },
+  { name: "Doc 2", value: 20 },
+  { name: "Doc 3", value: 30 }
+]);
+
+// Batch Update
+// Updates all documents where category is "old_tech"
+await collection.batch.update(
+  { category: "old_tech" }, // Filter
+  { category: "retro_tech", active: false } // Update data
+);
+
+// Batch Delete
+// Deletes all archived documents
+await collection.batch.delete({
+  archived: true
+});
 ```
 
 ## 🤝 Contributing
@@ -118,7 +197,7 @@ Contributions are welcome!
 # Clone the repo
 git clone https://github.com/realfakenerd/jason
 
-# Install dependencies 
+# Install dependencies
 bun install
 
 # Run tests
