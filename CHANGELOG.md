@@ -1,5 +1,11 @@
 # @aurios/jason
 
+## 3.0.2
+
+### Patch Changes
+
+- updated readme.md
+
 ## 2.0.0
 
 ### Major Changes

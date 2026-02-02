@@ -62,8 +62,8 @@ await users.create({
 
 // Find documents using helper functions
 const adults = await users.find({
-  where: { 
-    age: gte(18) 
+  where: {
+    age: gte(18)
   }
 });
 ```
@@ -79,7 +79,7 @@ const db = await createJasonDB({
   base_path: "./data", // Directory to store data
   collections: {
     // String syntax: "field1;field2:type;..."
-    posts: "@id;title;content;published:boolean;*tags",
+    posts: "@id;title;content;published:boolean;*tags"
     // You can also use Effect Schema objects if preferred
     // users: Schema.Struct({ ... })
   }
@@ -90,14 +90,14 @@ const db = await createJasonDB({
 
 The string syntax provides a shorthand for defining fields and indexes:
 
-*   **Format**: `name:type` (type defaults to string if omitted)
-*   **Types**: `string`, `number`, `boolean`, `date`, `array<T>`, `record<K,V>`
-*   **Modifiers**:
-    *   `@id`: UUID Primary Key
-    *   `++id`: Auto-increment Primary Key
-    *   `&name`: Unique Index
-    *   `*tags`: Multi-entry Index (for arrays)
-    *   `[a+b]`: Compound Index
+- **Format**: `name:type` (type defaults to string if omitted)
+- **Types**: `string`, `number`, `boolean`, `date`, `array<T>`, `record<K,V>`
+- **Modifiers**:
+  - `@id`: UUID Primary Key
+  - `++id`: Auto-increment Primary Key
+  - `&name`: Unique Index
+  - `*tags`: Multi-entry Index (for arrays)
+  - `[a+b]`: Compound Index
 
 ### 📑 Collection Operations
 
@@ -107,9 +107,9 @@ Access collections via `db.collections.<name>`.
 const collection = db.collections.posts;
 
 // Create
-const post = await collection.create({ 
-  title: "Hello World", 
-  tags: ["news", "tech"] 
+const post = await collection.create({
+  title: "Hello World",
+  tags: ["news", "tech"]
 });
 
 // Read (by ID)
@@ -139,7 +139,7 @@ const results = await collection.find({
 
 // Comparison operators
 const recent = await collection.find({
-  where: { 
+  where: {
     views: gt(100),
     title: startsWith("How to")
   },
@@ -149,10 +149,7 @@ const recent = await collection.find({
 
 // Logical operators
 const complex = await collection.find({
-  where: or(
-      { category: "tech" },
-      { views: gt(1000) }
-  )
+  where: or({ category: "tech" }, { views: gt(1000) })
 });
 ```
 
@@ -177,8 +174,8 @@ await collection.batch.update(
 
 // Batch Delete
 // Deletes all archived documents
-await collection.batch.delete({ 
-  archived: true 
+await collection.batch.delete({
+  archived: true
 });
 ```
 
@@ -198,7 +195,7 @@ Contributions are welcome!
 # Clone the repo
 git clone https://github.com/realfakenerd/jason
 
-# Install dependencies 
+# Install dependencies
 bun install
 
 # Run tests
