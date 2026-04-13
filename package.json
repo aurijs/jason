@@ -73,7 +73,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@effect/language-service": "^0.41.1",
+    "@effect/language-service": "^0.85.1",
     "@effect/platform-bun": "^0.79.1",
     "@prettier/plugin-oxc": "^0.0.4",
     "@types/madge": "^5.0.3",
