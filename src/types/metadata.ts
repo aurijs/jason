@@ -49,7 +49,12 @@ export const IndexDefinitionSchema = Schema.Struct({
    *
    * Indicated by `[key_one+key_two]`
    */
-  compound_path: Schema.optional(Schema.Array(Schema.String))
+  compound_path: Schema.optional(Schema.Array(Schema.String)),
+
+  /**
+   * Statistics about the index.
+   */
+  distinct_values: Schema.optional(Schema.Number)
 });
 
 /**

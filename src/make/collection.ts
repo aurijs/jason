@@ -4,6 +4,7 @@ import { DatabaseError } from "../core/errors.js";
 import { ConfigManager } from "../layers/config.js";
 import { makeIndexService } from "../layers/index.js";
 import { WriteAheadLog } from "../layers/wal.js";
+import { KeyedLock } from "../layers/keyed-lock.js";
 import type { BatchResult, Filter, QueryOptions } from "../types/collection.js";
 import { makeMetadata } from "./metadata.js";
 import { makeQuery } from "./query.js";
@@ -19,6 +20,7 @@ export const makeCollection = <Doc extends Record<string, any>>(
     const fs = yield* FileSystem.FileSystem;
     const config = yield* ConfigManager;
     const wal = yield* WriteAheadLog;
+    const keyedLock = yield* KeyedLock;
 
     // load path, schema and index
     const collection_path = yield* config.getCollectionPath(collection_name);
@@ -35,7 +37,8 @@ export const makeCollection = <Doc extends Record<string, any>>(
     const queryManager = yield* makeQuery<Doc>(
       collection_name,
       indexService,
-      storage
+      storage,
+      metadataService
     );
 
     return {
@@ -49,14 +52,19 @@ export const makeCollection = <Doc extends Record<string, any>>(
                 const id = (data.id as string) ?? crypto.randomUUID();
                 const new_document = { ...data, id } as Doc;
 
-                yield* storage.write(id, new_document);
+                yield* keyedLock.withLock(
+                  id,
+                  Effect.gen(function* () {
+                    yield* storage.write(id, new_document);
 
-                yield* Effect.all(
-                  [
-                    metadataService.incrementCount,
-                    indexService.update(undefined, new_document)
-                  ],
-                  { discard: true, concurrency: "unbounded" }
+                    yield* Effect.all(
+                      [
+                        metadataService.incrementCount,
+                        indexService.update(undefined, new_document)
+                      ],
+                      { discard: true, concurrency: "unbounded" }
+                    );
+                  })
                 );
 
                 results.success++;
@@ -113,18 +121,26 @@ export const makeCollection = <Doc extends Record<string, any>>(
             const docs_to_delete = yield* queryManager.find({ where: filter });
             const results: BatchResult = { success: 0, failures: [] };
 
-            const tasks = docs_to_delete.map((doc, i) =>
+            const tasks = docs_to_delete.map((doc_from_query, i) =>
               Effect.gen(function* () {
-                const id = doc.id;
+                const id = doc_from_query.id;
 
-                yield* storage.remove(id);
+                yield* keyedLock.withLock(
+                  id,
+                  Effect.gen(function* () {
+                    const current_doc = yield* storage.read(id);
+                    if (!current_doc) return;
 
-                yield* Effect.all(
-                  [
-                    metadataService.decrementCount,
-                    indexService.update(doc, undefined)
-                  ],
-                  { discard: true, concurrency: "unbounded" }
+                    yield* storage.remove(id);
+
+                    yield* Effect.all(
+                      [
+                        metadataService.decrementCount,
+                        indexService.update(current_doc, undefined)
+                      ],
+                      { discard: true, concurrency: "unbounded" }
+                    );
+                  })
                 );
 
                 results.success++;
@@ -174,19 +190,27 @@ export const makeCollection = <Doc extends Record<string, any>>(
             const docs_to_update = yield* queryManager.find({ where: filter });
             const results: BatchResult = { success: 0, failures: [] };
 
-            const tasks = docs_to_update.map((old_document, i) =>
+            const tasks = docs_to_update.map((doc_from_query, i) =>
               Effect.gen(function* () {
-                const id = old_document.id;
-                const new_document = { ...old_document, ...data } as Doc;
+                const id = doc_from_query.id;
 
-                yield* storage.write(id, new_document);
+                yield* keyedLock.withLock(
+                  id,
+                  Effect.gen(function* () {
+                    const current_doc = yield* storage.read(id);
+                    if (!current_doc) return;
 
-                yield* Effect.all(
-                  [
-                    metadataService.touch,
-                    indexService.update(old_document, new_document)
-                  ],
-                  { discard: true, concurrency: "unbounded" }
+                    const new_document = { ...current_doc, ...data } as Doc;
+                    yield* storage.write(id, new_document);
+
+                    yield* Effect.all(
+                      [
+                        metadataService.touch,
+                        indexService.update(current_doc, new_document)
+                      ],
+                      { discard: true, concurrency: "unbounded" }
+                    );
+                  })
                 );
 
                 results.success++;
@@ -248,28 +272,28 @@ export const makeCollection = <Doc extends Record<string, any>>(
           const id = (data.id as string) ?? crypto.randomUUID();
           const new_document = { ...data, id } as Doc;
 
-          // Perform storage write first to ensure validation passes before logging to WAL
-          // Actually, WAL should probably be first for durability, but if validation fails,
-          // we don't want it in WAL.
-          // Let's do validation explicitly if we want, or just let storage.write handle it.
+          return yield* keyedLock.withLock(
+            id,
+            Effect.gen(function* () {
+              yield* storage.write(id, new_document);
 
-          yield* storage.write(id, new_document);
+              yield* wal.log({
+                _tag: "CreateOp",
+                collection: collection_name,
+                data: new_document
+              });
 
-          yield* wal.log({
-            _tag: "CreateOp",
-            collection: collection_name,
-            data: new_document
-          });
+              yield* Effect.all(
+                [
+                  metadataService.incrementCount,
+                  indexService.update(undefined, new_document)
+                ],
+                { discard: true, concurrency: "unbounded" }
+              );
 
-          yield* Effect.all(
-            [
-              metadataService.incrementCount,
-              indexService.update(undefined, new_document)
-            ],
-            { discard: true, concurrency: "unbounded" }
+              return new_document;
+            })
           );
-
-          return new_document;
         }).pipe(
           Effect.catchTag("ValidationError", (e) => Effect.fail(e)),
           Effect.mapError((cause) => {
@@ -284,34 +308,37 @@ export const makeCollection = <Doc extends Record<string, any>>(
       findById: storage.read,
 
       update: (id: string, data: Partial<Doc>) =>
-        Effect.gen(function* () {
-          const old_document = yield* storage.read(id);
-          if (!old_document) return undefined;
+        keyedLock.withLock(
+          id,
+          Effect.gen(function* () {
+            const old_document = yield* storage.read(id);
+            if (!old_document) return undefined;
 
-          const new_document = {
-            ...old_document,
-            ...data
-          } as Doc;
+            const new_document = {
+              ...old_document,
+              ...data
+            } as Doc;
 
-          yield* storage.write(id, new_document);
+            yield* storage.write(id, new_document);
 
-          yield* wal.log({
-            _tag: "UpdateOp",
-            collection: collection_name,
-            id,
-            data
-          });
+            yield* wal.log({
+              _tag: "UpdateOp",
+              collection: collection_name,
+              id,
+              data
+            });
 
-          yield* Effect.all(
-            [
-              metadataService.touch,
-              indexService.update(old_document, new_document)
-            ],
-            { concurrency: "unbounded", discard: true }
-          );
+            yield* Effect.all(
+              [
+                metadataService.touch,
+                indexService.update(old_document, new_document)
+              ],
+              { concurrency: "unbounded", discard: true }
+            );
 
-          return new_document;
-        }).pipe(
+            return new_document;
+          })
+        ).pipe(
           Effect.catchTag("ValidationError", (e) => Effect.fail(e)),
           Effect.mapError((cause) => {
             if (cause._tag === "ValidationError") return cause;
@@ -323,28 +350,31 @@ export const makeCollection = <Doc extends Record<string, any>>(
         ),
 
       delete: (id: string) =>
-        Effect.gen(function* () {
-          const old_document = yield* storage.read(id);
-          if (!old_document) return false;
+        keyedLock.withLock(
+          id,
+          Effect.gen(function* () {
+            const old_document = yield* storage.read(id);
+            if (!old_document) return false;
 
-          yield* wal.log({
-            _tag: "DeleteOp",
-            collection: collection_name,
-            id
-          });
+            yield* wal.log({
+              _tag: "DeleteOp",
+              collection: collection_name,
+              id
+            });
 
-          yield* storage.remove(id);
+            yield* storage.remove(id);
 
-          yield* Effect.all(
-            [
-              metadataService.decrementCount,
-              indexService.update(old_document, undefined)
-            ],
-            { concurrency: "unbounded", discard: true }
-          );
+            yield* Effect.all(
+              [
+                metadataService.decrementCount,
+                indexService.update(old_document, undefined)
+              ],
+              { concurrency: "unbounded", discard: true }
+            );
 
-          return true;
-        }).pipe(
+            return true;
+          })
+        ).pipe(
           Effect.mapError(
             (cause) =>
               new DatabaseError({

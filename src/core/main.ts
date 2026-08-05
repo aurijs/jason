@@ -16,6 +16,7 @@ import { ConfigManager } from "../layers/config.js";
 import { JsonFile } from "../layers/json-file.js";
 import { Json } from "../layers/json.js";
 import { WriteAheadLog } from "../layers/wal.js";
+import { KeyedLock, KeyedLockLive } from "../layers/keyed-lock.js";
 import { makeCollection } from "../make/collection.js";
 import { makeStorageManager } from "../make/storage-manager.js";
 import type {
@@ -148,7 +149,8 @@ export const createJasonDBLayer = <
   const BaseInfraLayer = Layer.mergeAll(
     JsonFile.Default,
     Json.Default,
-    WriteAheadLog.Default
+    WriteAheadLog.Default,
+    KeyedLockLive
   );
 
   const AppLayer = Layer.scoped(JasonDB, makeJasonDB<T>(config));

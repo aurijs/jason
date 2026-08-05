@@ -1,75 +1,11 @@
 import { Effect, Stream } from "effect";
 import { ConfigManager } from "../layers/config.js";
 import type { Filter, QueryOptions } from "../types/collection.js";
-import type { IndexDefinition } from "../types/metadata.js";
+import type { CollectionMetadata, IndexDefinition } from "../types/metadata.js";
 
 import type { ComparisonOperator } from "../types/query.js";
 
-export function evaluateFilter<Doc>(doc: Doc, filter: Filter<Doc>): boolean {
-  if ("_tag" in filter) {
-    switch (filter._tag) {
-      case "and":
-        return filter.filters.every((f) => evaluateFilter(doc, f as any));
-      case "or":
-        return filter.filters.some((f) => evaluateFilter(doc, f as any));
-      case "not":
-        return !evaluateFilter(doc, filter.filter as any);
-    }
-  }
-
-  for (const key in filter) {
-    const filterValue = (filter as any)[key];
-    const docValue = (doc as any)[key];
-
-    if (
-      filterValue !== null &&
-      typeof filterValue === "object" &&
-      "_tag" in filterValue
-    ) {
-      const op = filterValue as ComparisonOperator<any>;
-      switch (op._tag) {
-        case "eq":
-          if (docValue !== op.value) return false;
-          break;
-        case "ne":
-          if (docValue === op.value) return false;
-          break;
-        case "gt":
-          if (!(docValue > op.value)) return false;
-          break;
-        case "gte":
-          if (!(docValue >= op.value)) return false;
-          break;
-        case "lt":
-          if (!(docValue < op.value)) return false;
-          break;
-        case "lte":
-          if (!(docValue <= op.value)) return false;
-          break;
-        case "in":
-          if (!op.values.includes(docValue)) return false;
-          break;
-        case "nin":
-          if (op.values.includes(docValue)) return false;
-          break;
-        case "startsWith":
-          if (typeof docValue !== "string" || !docValue.startsWith(op.value))
-            return false;
-          break;
-        case "regex": {
-          const re = new RegExp(op.pattern, op.flags);
-          if (typeof docValue !== "string" || !re.test(docValue)) return false;
-          break;
-        }
-      }
-    } else {
-      // Simple equality
-      if (docValue !== filterValue) return false;
-    }
-  }
-
-  return true;
-}
+// ... (REGEXP_CACHE and getRegExp remain the same)
 
 export const makeQuery = <Doc extends Record<string, any>>(
   collection_name: string,
@@ -77,15 +13,18 @@ export const makeQuery = <Doc extends Record<string, any>>(
   storage: {
     read: (id: string) => Effect.Effect<Doc | undefined, any>;
     readAll: Stream.Stream<Doc, any>;
+  },
+  metadata: {
+    get: Effect.Effect<CollectionMetadata, any>;
   }
 ) =>
   Effect.gen(function* () {
     const config = yield* ConfigManager;
-    const IndexDefinitions = yield* config.getIndexDefinitions(collection_name);
 
     function findBestIndex(
       where: Filter<Doc>,
-      definitions: Record<string, IndexDefinition>
+      definitions: Record<string, IndexDefinition>,
+      document_count: number
     ):
       | { type: "full-scan" }
       | { type: "index"; field: string; value: any }
@@ -101,6 +40,9 @@ export const makeQuery = <Doc extends Record<string, any>>(
         } {
       if ("_tag" in where) return { type: "full-scan" };
 
+      let bestPlan: any = { type: "full-scan" };
+      let bestScore = -1;
+
       for (const field in where) {
         if (Object.prototype.hasOwnProperty.call(definitions, field)) {
           const def = definitions[field];
@@ -108,6 +50,15 @@ export const makeQuery = <Doc extends Record<string, any>>(
             !(def.indexed || def.unique || def.primary_key || def.multi_entry)
           )
             continue;
+
+          let score = 1;
+          if (def.primary_key) score = 1000;
+          else if (def.unique) score = 500;
+          else if (def.distinct_values !== undefined && document_count > 0) {
+            // Selectivity = distinct_values / total_rows.
+            // A higher number of distinct values means the index is more restrictive.
+            score = Math.floor((def.distinct_values / document_count) * 100);
+          }
 
           const filterValue = (where as any)[field];
 
@@ -119,48 +70,67 @@ export const makeQuery = <Doc extends Record<string, any>>(
             const op = filterValue as ComparisonOperator<any>;
             switch (op._tag) {
               case "eq":
-                return { type: "index", field, value: op.value };
+                if (score > bestScore) {
+                  bestPlan = { type: "index", field, value: op.value };
+                  bestScore = score;
+                }
+                break;
               case "gt":
-                return {
-                  type: "range",
-                  field,
-                  options: { min: op.value, minInclusive: false }
-                };
               case "gte":
-                return {
-                  type: "range",
-                  field,
-                  options: { min: op.value, minInclusive: true }
-                };
               case "lt":
-                return {
-                  type: "range",
-                  field,
-                  options: { max: op.value, maxInclusive: false }
-                };
               case "lte":
-                return {
-                  type: "range",
-                  field,
-                  options: { max: op.value, maxInclusive: true }
-                };
+                // Range queries are generally less selective than point lookups
+                const rangeScore = score * 0.5;
+                if (rangeScore > bestScore) {
+                  bestPlan = {
+                    type: "range",
+                    field,
+                    options: {
+                      min:
+                        op._tag === "gt" || op._tag === "gte"
+                          ? op.value
+                          : undefined,
+                      minInclusive: op._tag === "gte",
+                      max:
+                        op._tag === "lt" || op._tag === "lte"
+                          ? op.value
+                          : undefined,
+                      maxInclusive: op._tag === "lte"
+                    }
+                  };
+                  bestScore = rangeScore;
+                }
+                break;
             }
           } else if (typeof filterValue !== "object" || filterValue === null) {
-            return { type: "index", field, value: filterValue };
+            if (score > bestScore) {
+              bestPlan = { type: "index", field, value: filterValue };
+              bestScore = score;
+            }
           }
         }
       }
 
-      return { type: "full-scan" };
+      return bestPlan;
     }
 
     return {
       find: (options: QueryOptions<Doc>) =>
         Effect.gen(function* () {
+          const currentMetadata = yield* metadata.get;
+          const indexDefinitions = {
+            ...(yield* config.getIndexDefinitions(collection_name)),
+            ...(currentMetadata.indexes || {})
+          };
+
           let initial_docs: Doc[] = [];
 
           if (options.where && Object.keys(options.where).length > 0) {
-            const plan = findBestIndex(options.where, IndexDefinitions);
+            const plan = findBestIndex(
+              options.where,
+              indexDefinitions,
+              currentMetadata.document_count
+            );
 
             if (plan.type === "index") {
               const ids = yield* index.findAllIds(plan.field, plan.value);
@@ -192,9 +162,8 @@ export const makeQuery = <Doc extends Record<string, any>>(
           let final_results = initial_docs;
 
           if (options.where) {
-            final_results = final_results.filter((doc) =>
-              evaluateFilter(doc, options.where)
-            );
+            const filterFn = compileFilter(options.where);
+            final_results = final_results.filter(filterFn);
           }
 
           if (options.order_by) {

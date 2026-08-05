@@ -76,6 +76,21 @@ export const makeBtreeService = <K>(
         )
       );
 
+    const deleteNode = (id: string) =>
+      fs.remove(`${three_path}/${id}.json`).pipe(
+        Effect.zipLeft(cache.invalidate(id)),
+        Effect.catchTag("SystemError", (e) =>
+          e.reason === "NotFound" ? Effect.void : Effect.fail(e)
+        ),
+        Effect.mapError(
+          (e) =>
+            new DatabaseError({
+              message: `Failed to delete node ${id}`,
+              cause: e
+            })
+        )
+      );
+
     const createNode = (is_leaf: boolean) =>
       Effect.sync(
         () =>
@@ -423,7 +438,7 @@ export const makeBtreeService = <K>(
         yield* Effect.all([writeNode(parent), writeNode(leftChild)], {
           concurrency: "inherit"
         });
-        // NOTE: rightChild is now abandoned/garbage. In a real system we'd free its disk space.
+        yield* deleteNode(rightChild.id);
       });
 
     const deleteFromNode = (
@@ -638,6 +653,7 @@ export const makeBtreeService = <K>(
           const root = yield* readNode(root_id);
           if (!root.is_leaf && root.keys.length === 0) {
             yield* updateRootId(root.children[0]);
+            yield* deleteNode(root_id);
           }
 
           return deleted;

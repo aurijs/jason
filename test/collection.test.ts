@@ -6,6 +6,7 @@ import { ConfigManager } from "../src/layers/config.js";
 import { JsonFile } from "../src/layers/json-file.js";
 import { Json } from "../src/layers/json.js";
 import { WriteAheadLog } from "../src/layers/wal.js";
+import { KeyedLockLive } from "../src/layers/keyed-lock.js";
 import { makeCollection } from "../src/make/collection.js";
 
 const UserSchema = Schema.Struct({
@@ -37,7 +38,8 @@ describe("Collection Service", () => {
 
         const ServiceLayer = Layer.mergeAll(
             JsonFile.Default,
-            WriteAheadLog.Default
+            WriteAheadLog.Default,
+            KeyedLockLive
         );
 
         const TestLayer = ServiceLayer.pipe(
@@ -97,7 +99,8 @@ describe("Collection Service", () => {
 
         const ServiceLayer = Layer.mergeAll(
             JsonFile.Default,
-            WriteAheadLog.Default
+            WriteAheadLog.Default,
+            KeyedLockLive
         );
 
         const TestLayer = ServiceLayer.pipe(
