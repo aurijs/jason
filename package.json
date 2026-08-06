@@ -57,7 +57,7 @@
   ],
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
-    "@effect/platform": "^0.90.10",
+    "@effect/platform": "^0.96.1",
     "@effect/platform-node": "^0.96.1",
     "@types/bun": "latest",
     "@vitest/coverage-v8": "2.1.9",
